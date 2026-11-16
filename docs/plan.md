@@ -26,17 +26,17 @@ The reasons for the major decisions are in [the ADRs](adr/).
 Touch, keyboard and mouse are all first-class input modes.
 The build is mobile-first.
 
-| Action | Touch | Keyboard | Mouse |
-| --- | --- | --- | --- |
-| Complete or uncomplete | Swipe right | `Space` or `X` | Checkbox on hover or focus |
-| Delete | Swipe left | `Backspace` or `Delete` | Trash icon on hover or focus |
-| Add at top | Pull down | `N` | "+" at the top |
-| Add between items | Pinch apart | `Enter` (adds below) | Hover the gap, then click |
-| Edit title | Tap | `Enter` or `F2` | Click |
-| Reorder | Long-press and drag | `Alt+Up` or `Alt+Down` | Drag handle |
-| Go up a level | Pinch in | `Esc` or `Alt+Left` | Back button |
-| Clear all completed | Pull up past the end | `Shift+Backspace` | Menu item |
-| Undo | - | `Cmd/Ctrl+Z` | "Undo" in the toast |
+| Action                 | Touch                | Keyboard                | Mouse                        |
+| ---------------------- | -------------------- | ----------------------- | ---------------------------- |
+| Complete or uncomplete | Swipe right          | `Space` or `X`          | Checkbox on hover or focus   |
+| Delete                 | Swipe left           | `Backspace` or `Delete` | Trash icon on hover or focus |
+| Add at top             | Pull down            | `N`                     | "+" at the top               |
+| Add between items      | Pinch apart          | `Enter` (adds below)    | Hover the gap, then click    |
+| Edit title             | Tap                  | `Enter` or `F2`         | Click                        |
+| Reorder                | Long-press and drag  | `Alt+Up` or `Alt+Down`  | Drag handle                  |
+| Go up a level          | Pinch in             | `Esc` or `Alt+Left`     | Back button                  |
+| Clear all completed    | Pull up past the end | `Shift+Backspace`       | Menu item                    |
+| Undo                   | -                    | `Cmd/Ctrl+Z`            | "Undo" in the toast          |
 
 - Mouse insert: after a hover intent delay of about 120-150 ms, the list opens a gap between the two items.
   The gap closes with a spring when the pointer leaves.
@@ -82,15 +82,15 @@ A slim bar at the bottom of the screen always shows the sync status.
 It has icon and text, never color alone, and a polite live region announces changes.
 State changes cross-fade inside the bar, and the bar never changes height.
 
-| State | Text | Recovery action |
-| --- | --- | --- |
-| `synced` | "Synced · 2 min ago" | - |
-| `syncing` | "Syncing…" | - |
-| `offline` | "Offline · 3 changes saved on this device" | "Retry now" |
-| `signInRequired` | "Sign in to sync · 3 changes waiting" | "Sign in" |
-| `error` | "Sync failed · retry in 30 s" | "Retry now", "Details" |
-| `updateRequired` | "A new version is available" | "Reload" |
-| `accountMismatch` | "Local changes belong to another account" | "Resolve" |
+| State             | Text                                       | Recovery action        |
+| ----------------- | ------------------------------------------ | ---------------------- |
+| `synced`          | "Synced · 2 min ago"                       | -                      |
+| `syncing`         | "Syncing…"                                 | -                      |
+| `offline`         | "Offline · 3 changes saved on this device" | "Retry now"            |
+| `signInRequired`  | "Sign in to sync · 3 changes waiting"      | "Sign in"              |
+| `error`           | "Sync failed · retry in 30 s"              | "Retry now", "Details" |
+| `updateRequired`  | "A new version is available"               | "Reload"               |
+| `accountMismatch` | "Local changes belong to another account"  | "Resolve"              |
 
 - The offline state comes from failed sync requests, not from `navigator.onLine` alone.
 - The bar shows "offline" only after about 2-3 s of failure, so short drops are invisible.
@@ -129,9 +129,9 @@ State changes cross-fade inside the bar, and the bar never changes height.
 - Motion and @use-gesture.
 - Our own HTTP push and pull sync with IndexedDB on the client.
 - Vercel in an EU region for the SPA and the API functions.
-- Postgres from the Vercel Marketplace in an EU region.
+- Neon free plan in Frankfurt, through the Vercel Marketplace.
 - Drizzle, with generated SQL migrations that are reviewed and committed.
-- A self-hosted auth library with Google and GitHub.
+- Better Auth with Google and GitHub, exact version pinned.
 - pnpm, ESLint, Prettier.
 
 ## Tests
@@ -149,5 +149,4 @@ State changes cross-fade inside the bar, and the bar never changes height.
 
 ## Open items
 
-- Choose the auth library after a check of the current options (candidates: Better Auth, Auth.js).
-- Choose the Postgres provider after a check of the free tier limits and backups (candidate: Neon).
+- Confirm that the Neon free plan offers Frankfurt when we create the database.
