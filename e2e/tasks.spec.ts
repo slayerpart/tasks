@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { deleteTask, toggleTask } from "./gestures.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -33,12 +34,13 @@ test.beforeEach(async ({ page }) => {
 
 test("adds, completes, reorders and deletes tasks, and keeps them after a reload", async ({
   page,
+  hasTouch,
 }) => {
   await addTasks(page, ["Milk", "Bread", "Eggs", "Tea"]);
-  await page.getByRole("checkbox", { name: "Bread" }).click();
+  await toggleTask(page, hasTouch, "Bread");
   await page.getByRole("button", { name: "Edit Tea" }).focus();
   await page.keyboard.press("Alt+ArrowUp");
-  await page.getByRole("button", { name: "Delete Milk" }).click();
+  await deleteTask(page, hasTouch, "Milk");
 
   const expected = [
     { title: "Tea", done: false },
@@ -117,10 +119,11 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     test("has no accessibility violations with open, completed and edited tasks", async ({
       page,
+      hasTouch,
     }) => {
       const titles = ["Buy oat milk", "Call the landlord", "Book dentist", "Reply to Anna"];
       await addTasks(page, [...titles, "Water the plants", "Renew passport", "Pick up parcel"]);
-      await page.getByRole("checkbox", { name: "Call the landlord" }).click();
+      await toggleTask(page, hasTouch, "Call the landlord");
       await page.getByRole("button", { name: "Edit Pick up parcel" }).click();
       await expect(page.getByRole("textbox", { name: "Task title" })).toBeFocused();
       // Wait until all rows have settled, so axe sees the final colors.

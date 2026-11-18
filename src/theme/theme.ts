@@ -18,6 +18,10 @@ export interface Theme {
   readonly heatEnd: SchemeColor;
   readonly completedSurface: SchemeColor;
   readonly completedText: SchemeColor;
+  /** The track behind a row that the user swipes, and its colors when an action is armed. */
+  readonly swipeTrack: SchemeColor;
+  readonly swipeComplete: SchemeColor;
+  readonly swipeDelete: SchemeColor;
 }
 
 export const defaultTheme = {
@@ -28,6 +32,9 @@ export const defaultTheme = {
   heatEnd: { light: "oklch(66.5% 0.152 57)", dark: "oklch(66.5% 0.152 57)" },
   completedSurface: { light: "oklch(94% 0.004 60)", dark: "oklch(24% 0.006 60)" },
   completedText: { light: "oklch(52% 0.01 60)", dark: "oklch(68% 0.01 60)" },
+  swipeTrack: { light: "oklch(32% 0.01 60)", dark: "oklch(11% 0.005 60)" },
+  swipeComplete: { light: "oklch(60% 0.15 150)", dark: "oklch(56% 0.14 150)" },
+  swipeDelete: { light: "oklch(42% 0.17 25)", dark: "oklch(40% 0.16 25)" },
 } as const satisfies Theme;
 
 function kebabCase(name: string): string {

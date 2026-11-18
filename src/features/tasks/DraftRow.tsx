@@ -27,8 +27,10 @@ export function DraftRow({ id, heat, onCommit, onCancel }: DraftRowProps) {
       data-task-id={id}
       style={{ "--heat": heat }}
     >
-      <span className={styles["checkPlaceholder"]} aria-hidden="true" />
-      <TitleInput initialTitle="" label="New task" onCommit={onCommit} onCancel={onCancel} />
+      <div className={styles["rowContent"]}>
+        <span className={styles["checkPlaceholder"]} aria-hidden="true" />
+        <TitleInput initialTitle="" label="New task" onCommit={onCommit} onCancel={onCancel} />
+      </div>
     </motion.li>
   );
 }

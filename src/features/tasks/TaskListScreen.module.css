@@ -54,16 +54,66 @@
   --row-text: oklch(100% 0 0);
   --row-focus: oklch(100% 0 0);
 
+  /* The row is the track that a swipe reveals. The content layer moves over it. */
+  position: relative;
+  overflow: hidden;
+  background: var(--color-swipe-track);
+  color: var(--row-text);
+  transition: background-color 120ms ease-out;
+}
+
+.row[data-armed="complete"] {
+  background: var(--color-swipe-complete);
+}
+
+.row[data-armed="delete"] {
+  background: var(--color-swipe-delete);
+}
+
+.swipeIcon {
+  position: absolute;
+  inset-block: 0;
+  margin-block: auto;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  fill: none;
+  stroke: oklch(100% 0 0);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+  transition:
+    opacity 120ms ease-out,
+    scale 160ms ease-out;
+}
+
+.swipeIcon[data-side="start"] {
+  inset-inline-start: 1.125rem;
+}
+
+.swipeIcon[data-side="end"] {
+  inset-inline-end: 1.125rem;
+}
+
+.row[data-armed="complete"] .swipeIcon[data-side="start"],
+.row[data-armed="delete"] .swipeIcon[data-side="end"] {
+  opacity: 1;
+  scale: 1.15;
+}
+
+.rowContent {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.25rem;
   min-block-size: 4rem;
   padding-inline: 0.5rem;
   background: var(--row-surface);
-  color: var(--row-text);
   box-shadow:
     inset 0 1px 0 oklch(100% 0 0 / 0.1),
     inset 0 -1px 0 oklch(0% 0 0 / 0.08);
+  /* The browser scrolls vertically. Sideways moves are swipes. */
+  touch-action: pan-y;
   /* Heat colors follow the position of a row. A paint-only transition, no layout. */
   transition: background-color 280ms ease-out;
 }
@@ -198,7 +248,7 @@
   border-radius: 50%;
 }
 
-/* With a mouse, the row controls appear on hover or focus. Touch gets gestures in a later increment. */
+/* With a mouse, the row controls appear on hover or focus. */
 @media (hover: hover) {
   .checkBox:has(.check:not(:checked)),
   .delete {
@@ -221,8 +271,31 @@
   font-size: 1.125rem;
 }
 
+/*
+ * Touch users swipe instead. The controls stay in the accessibility tree for screen readers,
+ * and they appear when they get keyboard focus.
+ */
+@media (hover: none) {
+  .row:not(:has([data-control]:focus-visible)) :is(.checkBox, .delete),
+  .checkPlaceholder {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .rowContent {
+    padding-inline-start: 1rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .row,
+  .rowContent,
+  .swipeIcon,
   .checkBox,
   .delete {
     transition: none;

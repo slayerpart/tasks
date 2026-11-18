@@ -1,6 +1,8 @@
 import { AnimatePresence } from "motion/react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
+import { useFeedback } from "../../feedback/feedback-context.tsx";
+import type { Sound } from "../../feedback/feedback.ts";
 import * as commands from "../../model/commands.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { TaskId, TaskList } from "../../model/types.ts";
@@ -38,6 +40,7 @@ function isTyping(target: EventTarget | null): boolean {
 
 export function TaskListScreen({ list }: { list: TaskList }) {
   const store = useAppStore();
+  const feedback = useFeedback();
   const { state } = useAppSnapshot();
   const items = displayTasks(state, list.id);
   const openCount = items.filter((item) => item.kind === "open").length;
@@ -81,6 +84,11 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     };
   });
 
+  function signal(sound: Sound): void {
+    feedback.sounds.play(sound);
+    feedback.haptics.tap();
+  }
+
   function requestFocus(request: FocusRequest): void {
     focusRequest.current = request;
   }
@@ -97,6 +105,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     }
     fromDraft.current.add(current.id);
     store.dispatch(commands.createTask(state, context, list.id, current.index, title, current.id));
+    signal("add");
     setActiveId(current.id);
     if (reason === "enter") {
       setDraft({ id: commands.newTaskId(context), index: current.index + 1 });
@@ -124,6 +133,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   }
 
   function toggle(item: DisplayTask): void {
+    signal(item.kind === "open" ? "complete" : "uncomplete");
     store.dispatch(
       item.kind === "open"
         ? commands.completeTask(context, item.task.id)
@@ -134,6 +144,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   function remove(item: DisplayTask, index: number): void {
     const neighbor = items[index + 1] ?? items[index - 1];
     store.dispatch(commands.deleteTask(context, item.task.id));
+    signal("delete");
     if (neighbor !== undefined) {
       setActiveId(neighbor.task.id);
       requestFocus({ taskId: neighbor.task.id, control: "title" });

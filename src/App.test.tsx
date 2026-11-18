@@ -4,17 +4,22 @@ import { describe, expect, it } from "vitest";
 import { App } from "./App.tsx";
 import { openAppStore } from "./app/store.ts";
 import { StoreProvider } from "./app/store-context.tsx";
+import { FeedbackProvider } from "./feedback/feedback-context.tsx";
 import { createMemoryLocalStore } from "./test/memory-local-store.ts";
+import { createRecordingFeedback } from "./test/recording-feedback.ts";
 
 async function renderApp() {
   const store = await openAppStore(createMemoryLocalStore());
+  const { feedback, events } = createRecordingFeedback();
   const user = userEvent.setup();
   render(
     <StoreProvider store={store}>
-      <App />
+      <FeedbackProvider feedback={feedback}>
+        <App />
+      </FeedbackProvider>
     </StoreProvider>,
   );
-  return { store, user };
+  return { store, user, feedback: events };
 }
 
 /** The task list in display order. Each row has one checkbox, named after its task. */
@@ -174,5 +179,34 @@ describe("App", () => {
 
     expect(titles()).toEqual(["Milk"]);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Milk" }));
+  });
+
+  it("plays a sound and a haptic tap for each add, complete, uncomplete and delete", async () => {
+    const { user, feedback } = await renderApp();
+
+    await addTasks(user, ["Milk"]);
+    await user.click(screen.getByRole("checkbox", { name: "Milk" }));
+    await user.click(screen.getByRole("checkbox", { name: "Milk" }));
+    await user.click(screen.getByRole("button", { name: "Delete Milk" }));
+
+    expect(feedback).toEqual(
+      (["add", "complete", "uncomplete", "delete"] as const).flatMap((sound) => [
+        { kind: "sound", sound },
+        { kind: "tap" },
+      ]),
+    );
+  });
+
+  it("gives no feedback when nothing changes", async () => {
+    const { user, feedback } = await renderApp();
+    await addTasks(user, ["Milk"]);
+    feedback.length = 0;
+
+    await user.click(screen.getByRole("button", { name: "Add task" }));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await user.keyboard("{Enter}{Escape}");
+
+    expect(feedback).toEqual([]);
   });
 });
