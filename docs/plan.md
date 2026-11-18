@@ -60,6 +60,10 @@ The build is mobile-first.
   - `prefers-reduced-motion` gives short fades instead of movement.
 - Heat-map colors come from the position of each item, computed with `color-mix()` in OKLCH.
   There are 3 to 4 themes, plus light and dark mode that follow the system setting.
+- Task titles are white, 20 px and bold, which is large text in WCAG terms.
+  Every heat color must have 3:1 contrast with white, and axe checks this in the E2E tests.
+  No text shadow is used for contrast.
+- The heat spreads over at least 6 positions, so short lists stay in the warm reds.
 - Sound is on by default and has a toggle.
   Sounds are synthesized with the Web Audio API behind one `sounds.play()` interface.
   Each completed task in a row plays the next note of a scale.
@@ -150,3 +154,6 @@ State changes cross-fade inside the bar, and the bar never changes height.
 ## Open items
 
 - Confirm that the Neon free plan offers Frankfurt when we create the database.
+- Playwright is pinned to 1.64.1.
+  Playwright 1.65 ships a Firefox build that crashes when getByRole reads a name from aria-labelledby ([microsoft/playwright#43967](https://github.com/microsoft/playwright/issues/43967)).
+  Upgrade when a release fixes it, and run the E2E suite with `--repeat-each=10` before you accept the upgrade.

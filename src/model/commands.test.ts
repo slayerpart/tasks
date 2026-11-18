@@ -130,7 +130,20 @@ describe("task commands", () => {
     expect(openTitles(state, listId)).toEqual(["Bread", "Eggs", "Milk"]);
   });
 
-  it("gives open tasks a heat position from 0 at the top to 1 at the bottom", () => {
+  it("spreads the heat of a long list from 0 at the top to 1 at the bottom", () => {
+    const context = testContext();
+    const created = stateWithList(context);
+    const titles = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
+    const state = addTasks(created.state, context, created.listId, titles);
+
+    const heats = displayTasks(state, created.listId).map((item) =>
+      item.kind === "open" ? item.heat : null,
+    );
+
+    expect(heats).toEqual([0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1]);
+  });
+
+  it("spreads the heat of a short list over 6 positions, so it stays in the warm reds", () => {
     const context = testContext();
     const created = stateWithList(context);
     const state = addTasks(created.state, context, created.listId, ["A", "B", "C"]);
@@ -139,7 +152,7 @@ describe("task commands", () => {
       item.kind === "open" ? item.heat : null,
     );
 
-    expect(heats).toEqual([0, 0.5, 1]);
+    expect(heats).toEqual([0, 0.2, 0.4]);
   });
 
   it("gives a single open task heat 0", () => {
@@ -191,6 +204,24 @@ describe("task commands", () => {
 
     expect(first.order).toBe(second.order);
     expect(openTitles(phoneFirst, listId)).toEqual(openTitles(laptopFirst, listId));
+  });
+
+  it("keeps the ID of a draft when it creates the task", () => {
+    const context = testContext();
+    const created = stateWithList(context);
+    const draftId = commands.newTaskId(context);
+
+    const mutation = commands.createTask(
+      created.state,
+      context,
+      created.listId,
+      0,
+      "Milk",
+      draftId,
+    );
+
+    expect(mutation.taskId).toBe(draftId);
+    expect(mutation.mutationId).not.toBe(draftId);
   });
 
   it("rejects a command for a task that does not exist", () => {

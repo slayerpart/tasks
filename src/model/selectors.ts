@@ -6,7 +6,7 @@ export type DisplayTask =
   | {
       readonly kind: "open";
       readonly task: Task;
-      /** 0 for the first open task, 1 for the last. */
+      /** 0 for the first open task. It reaches 1 only in lists with 6 or more open tasks. */
       readonly heat: number;
     }
   | { readonly kind: "completed"; readonly task: Task };
@@ -39,12 +39,26 @@ export function completedTasks(state: State, listId: ListId): readonly Task[] {
     .sort(byCompletion);
 }
 
+/**
+ * The heat spreads over at least this many steps. Short lists stay in the warm reds,
+ * and a new task does not shift all colors to the other end.
+ */
+const minHeatSteps = 5;
+
+/** The heat of the open task at `index` in a list with `openCount` open tasks. */
+export function heatAt(index: number, openCount: number): number {
+  return index / Math.max(minHeatSteps, openCount - 1);
+}
+
 /** Open tasks first, in their order, then completed tasks. */
 export function displayTasks(state: State, listId: ListId): readonly DisplayTask[] {
   const open = openTasks(state, listId);
-  const lastIndex = Math.max(1, open.length - 1);
   return [
-    ...open.map((task, index): DisplayTask => ({ kind: "open", task, heat: index / lastIndex })),
+    ...open.map((task, index): DisplayTask => ({
+      kind: "open",
+      task,
+      heat: heatAt(index, open.length),
+    })),
     ...completedTasks(state, listId).map((task): DisplayTask => ({ kind: "completed", task })),
   ];
 }

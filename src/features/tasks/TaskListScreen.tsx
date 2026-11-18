@@ -1,0 +1,259 @@
+import { AnimatePresence } from "motion/react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
+import * as commands from "../../model/commands.ts";
+import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
+import type { TaskId, TaskList } from "../../model/types.ts";
+import { DraftRow } from "./DraftRow.tsx";
+import styles from "./TaskListScreen.module.css";
+import { TaskRow, type RowControl } from "./TaskRow.tsx";
+import type { CommitReason } from "./TitleInput.tsx";
+
+const context = commands.browserCommandContext;
+
+interface Draft {
+  readonly id: TaskId;
+  /** The position among the open tasks. */
+  readonly index: number;
+}
+
+interface FocusRequest {
+  readonly taskId: TaskId;
+  readonly control: RowControl;
+}
+
+function isRowControl(value: string | undefined): value is RowControl {
+  return value === "check" || value === "title" || value === "delete";
+}
+
+/** True when the user types into a field, so single-key shortcuts must not act. */
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target instanceof HTMLInputElement
+      ? target.type !== "checkbox"
+      : target instanceof HTMLTextAreaElement || target.isContentEditable)
+  );
+}
+
+export function TaskListScreen({ list }: { list: TaskList }) {
+  const store = useAppStore();
+  const { state } = useAppSnapshot();
+  const items = displayTasks(state, list.id);
+  const openCount = items.filter((item) => item.kind === "open").length;
+  const headingId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [editingId, setEditingId] = useState<TaskId | null>(null);
+  const [activeId, setActiveId] = useState<TaskId | null>(null);
+  /** Focus to move after the next render. Every request comes with a state change that renders. */
+  const focusRequest = useRef<FocusRequest | null>(null);
+  /** Tasks that replaced a draft row. They must not play the enter animation again. */
+  const fromDraft = useRef(new Set<TaskId>());
+
+  const tabbableId = items.some((item) => item.task.id === activeId)
+    ? activeId
+    : (items[0]?.task.id ?? null);
+
+  useEffect(() => {
+    const request = focusRequest.current;
+    if (request === null) return;
+    focusRequest.current = null;
+    listRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-task-id="${request.taskId}"] [data-control="${request.control}"]`,
+      )
+      ?.focus();
+  });
+
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      const plainKey = !event.altKey && !event.ctrlKey && !event.metaKey;
+      if (plainKey && event.key.toLowerCase() === "n" && !isTyping(event.target)) {
+        event.preventDefault();
+        startDraft(0);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  });
+
+  function requestFocus(request: FocusRequest): void {
+    focusRequest.current = request;
+  }
+
+  function startDraft(index: number): void {
+    setEditingId(null);
+    setDraft({ id: commands.newTaskId(context), index });
+  }
+
+  function commitDraft(current: Draft, title: string, reason: CommitReason): void {
+    if (title === "") {
+      setDraft(null);
+      return;
+    }
+    fromDraft.current.add(current.id);
+    store.dispatch(commands.createTask(state, context, list.id, current.index, title, current.id));
+    setActiveId(current.id);
+    if (reason === "enter") {
+      setDraft({ id: commands.newTaskId(context), index: current.index + 1 });
+    } else {
+      setDraft(null);
+    }
+  }
+
+  function commitEdit(item: DisplayTask, title: string, reason: CommitReason): void {
+    setEditingId(null);
+    if (title !== "" && title !== item.task.title) {
+      store.dispatch(commands.renameTask(context, item.task.id, title));
+    }
+    if (reason === "enter" && item.kind === "open") {
+      const index = openTasks(state, list.id).findIndex((task) => task.id === item.task.id);
+      startDraft(index + 1);
+    } else if (reason === "enter") {
+      requestFocus({ taskId: item.task.id, control: "title" });
+    }
+  }
+
+  function cancelEdit(item: DisplayTask): void {
+    setEditingId(null);
+    requestFocus({ taskId: item.task.id, control: "title" });
+  }
+
+  function toggle(item: DisplayTask): void {
+    store.dispatch(
+      item.kind === "open"
+        ? commands.completeTask(context, item.task.id)
+        : commands.uncompleteTask(state, context, item.task.id),
+    );
+  }
+
+  function remove(item: DisplayTask, index: number): void {
+    const neighbor = items[index + 1] ?? items[index - 1];
+    store.dispatch(commands.deleteTask(context, item.task.id));
+    if (neighbor !== undefined) {
+      setActiveId(neighbor.task.id);
+      requestFocus({ taskId: neighbor.task.id, control: "title" });
+    }
+  }
+
+  function onRowKeyDown(event: KeyboardEvent<HTMLLIElement>, item: DisplayTask, index: number) {
+    if (isTyping(event.target) || event.ctrlKey || event.metaKey) return;
+    const control =
+      event.target instanceof HTMLElement ? event.target.dataset["control"] : undefined;
+    const focusedControl: RowControl = isRowControl(control) ? control : "title";
+
+    if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.altKey) {
+      event.preventDefault();
+      if (item.kind !== "open") return;
+      const from = openTasks(state, list.id).findIndex((task) => task.id === item.task.id);
+      const to = event.key === "ArrowDown" ? from + 1 : from - 1;
+      if (to < 0 || to >= openCount) return;
+      store.dispatch(commands.moveTask(state, context, item.task.id, to));
+      requestFocus({ taskId: item.task.id, control: focusedControl });
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const neighbor = items[event.key === "ArrowDown" ? index + 1 : index - 1];
+      if (neighbor === undefined) return;
+      setActiveId(neighbor.task.id);
+      requestFocus({ taskId: neighbor.task.id, control: focusedControl });
+    } else if (event.altKey) {
+      return;
+    } else if (event.key.toLowerCase() === "x") {
+      event.preventDefault();
+      toggle(item);
+    } else if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      remove(item, index);
+    }
+  }
+
+  const taskRows: ReactNode[] = items.map((item, index) => (
+    <TaskRow
+      key={item.task.id}
+      item={item}
+      skipEnterAnimation={fromDraft.current.has(item.task.id)}
+      editing={editingId === item.task.id}
+      tabbable={tabbableId === item.task.id}
+      onToggle={() => {
+        toggle(item);
+      }}
+      onEdit={() => {
+        setDraft(null);
+        setEditingId(item.task.id);
+      }}
+      onCommitEdit={(title, reason) => {
+        commitEdit(item, title, reason);
+      }}
+      onCancelEdit={() => {
+        cancelEdit(item);
+      }}
+      onDelete={() => {
+        remove(item, index);
+      }}
+      onFocus={() => {
+        setActiveId(item.task.id);
+      }}
+      onKeyDown={(event) => {
+        onRowKeyDown(event, item, index);
+      }}
+    />
+  ));
+  const rows: ReactNode[] =
+    draft === null
+      ? taskRows
+      : [
+          ...taskRows.slice(0, draft.index),
+          <DraftRow
+            key={draft.id}
+            id={draft.id}
+            heat={heatAt(draft.index, openCount + 1)}
+            onCommit={(title, reason) => {
+              commitDraft(draft, title, reason);
+            }}
+            onCancel={() => {
+              setDraft(null);
+            }}
+          />,
+          ...taskRows.slice(draft.index),
+        ];
+
+  return (
+    <section className={styles["screen"]} aria-labelledby={headingId}>
+      <header className={styles["header"]}>
+        <h1 id={headingId} className={styles["heading"]}>
+          {list.title}
+        </h1>
+        <button
+          type="button"
+          className={styles["add"]}
+          aria-label="Add task"
+          aria-keyshortcuts="N"
+          onClick={() => {
+            startDraft(0);
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </header>
+      <ul ref={listRef} className={styles["list"]} aria-labelledby={headingId}>
+        <AnimatePresence initial={false} mode="popLayout">
+          {rows}
+        </AnimatePresence>
+      </ul>
+      {items.length === 0 && draft === null && (
+        <p className={styles["empty"]}>Nothing to do. Add a task with +.</p>
+      )}
+    </section>
+  );
+}

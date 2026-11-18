@@ -1,0 +1,230 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.5rem 0.75rem 1.25rem;
+}
+
+.heading {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.add {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .add:hover {
+    background: color-mix(in oklch, currentColor 10%, transparent);
+  }
+}
+
+.list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  /* Rows are white text on heat colors. The theme guarantees 3:1 for this large, bold text. */
+  --row-surface: color-mix(
+    in oklch,
+    var(--color-heat-start),
+    var(--color-heat-end) calc(var(--heat, 0) * 100%)
+  );
+  --row-text: oklch(100% 0 0);
+  --row-focus: oklch(100% 0 0);
+
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-block-size: 4rem;
+  padding-inline: 0.5rem;
+  background: var(--row-surface);
+  color: var(--row-text);
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.1),
+    inset 0 -1px 0 oklch(0% 0 0 / 0.08);
+  /* Heat colors follow the position of a row. A paint-only transition, no layout. */
+  transition: background-color 280ms ease-out;
+}
+
+.row[data-kind="completed"] {
+  --row-surface: var(--color-completed-surface);
+  --row-text: var(--color-completed-text);
+  --row-focus: var(--color-focus);
+}
+
+.title,
+.titleInput {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0.75rem 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  /* 20 px bold is large text in WCAG terms. The heat palette depends on it. */
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: start;
+}
+
+.title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.row[data-kind="completed"] .title {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.titleInput {
+  margin-inline: 0;
+  border-radius: 0.375rem;
+  /* A dark fill. A light fill would lower the contrast of the white text. */
+  background: oklch(0% 0 0 / 0.14);
+  caret-color: currentColor;
+}
+
+.row[data-kind="completed"] .titleInput {
+  background: color-mix(in oklch, currentColor 12%, transparent);
+}
+
+/* A text field shows its caret and fill. It needs no focus ring. */
+.row .titleInput:focus-visible {
+  outline: none;
+}
+
+.titleInput::placeholder {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.checkBox,
+.checkPlaceholder {
+  position: relative;
+  display: grid;
+  flex: none;
+  inline-size: 1.625rem;
+  block-size: 1.625rem;
+  margin: 0.5625rem;
+}
+
+.checkBox > * {
+  grid-area: 1 / 1;
+}
+
+.check {
+  appearance: none;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  /* Form controls do not inherit the text color by default. */
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.check:checked {
+  background: currentColor;
+}
+
+/* The mark uses the row surface color, so it stays visible on every row and theme. */
+.checkMark {
+  inline-size: 100%;
+  block-size: 100%;
+  fill: none;
+  stroke: var(--row-surface);
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.check:checked + .checkMark {
+  opacity: 1;
+}
+
+.delete {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.row :focus-visible {
+  outline: 2px solid var(--row-focus);
+  outline-offset: -2px;
+  border-radius: 0.375rem;
+}
+
+.row .check:focus-visible,
+.row .delete:focus-visible {
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+/* With a mouse, the row controls appear on hover or focus. Touch gets gestures in a later increment. */
+@media (hover: hover) {
+  .checkBox:has(.check:not(:checked)),
+  .delete {
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+
+  .row:hover .checkBox,
+  .row:hover .delete,
+  .row:focus-within .checkBox,
+  .row:focus-within .delete {
+    opacity: 1;
+  }
+}
+
+.empty {
+  margin: 0;
+  padding: 2rem 1.25rem;
+  color: var(--color-completed-text);
+  font-size: 1.125rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .checkBox,
+  .delete {
+    transition: none;
+  }
+}

@@ -66,19 +66,28 @@ export function deleteList(context: CommandContext, listId: ListId): MutationOf<
   return { ...base(context), type: "deleteList", listId };
 }
 
-/** Creates a task at `index` among the open tasks of the list. */
+/** Returns an ID for a task that the UI shows as a draft before it creates the task. */
+export function newTaskId(context: CommandContext): TaskId {
+  return context.newId() as TaskId;
+}
+
+/**
+ * Creates a task at `index` among the open tasks of the list.
+ * Give `taskId` to keep the ID of a draft.
+ */
 export function createTask(
   state: State,
   context: CommandContext,
   listId: ListId,
   index: number,
   title: string,
+  taskId: TaskId = newTaskId(context),
 ): MutationOf<"createTask"> {
   const keys = openTasks(state, listId).map((task) => task.order);
   return {
     ...base(context),
     type: "createTask",
-    taskId: context.newId() as TaskId,
+    taskId,
     listId,
     title,
     order: keyForIndex(keys, index),
