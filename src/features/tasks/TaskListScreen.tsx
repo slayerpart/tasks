@@ -1,4 +1,4 @@
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
@@ -10,6 +10,7 @@ import { DraftRow } from "./DraftRow.tsx";
 import styles from "./TaskListScreen.module.css";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
 import type { CommitReason } from "./TitleInput.tsx";
+import { usePull } from "./use-pull.ts";
 
 const context = commands.browserCommandContext;
 
@@ -17,6 +18,8 @@ interface Draft {
   readonly id: TaskId;
   /** The position among the open tasks. */
   readonly index: number;
+  /** True when the draft replaces the pull panel, which is already visible. */
+  readonly fromPull: boolean;
 }
 
 interface FocusRequest {
@@ -46,6 +49,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const openCount = items.filter((item) => item.kind === "open").length;
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
+  const screenRef = useRef<HTMLElement>(null);
+  const pullPanelRef = useRef<HTMLDivElement>(null);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editingId, setEditingId] = useState<TaskId | null>(null);
@@ -93,10 +98,14 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     focusRequest.current = request;
   }
 
-  function startDraft(index: number): void {
+  function startDraft(index: number, fromPull = false): void {
     setEditingId(null);
-    setDraft({ id: commands.newTaskId(context), index });
+    setDraft({ id: commands.newTaskId(context), index, fromPull });
   }
+
+  const pull = usePull(screenRef, pullPanelRef, editingId === null, () => {
+    startDraft(0, true);
+  });
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
     if (title === "") {
@@ -108,7 +117,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     signal("add");
     setActiveId(current.id);
     if (reason === "enter") {
-      setDraft({ id: commands.newTaskId(context), index: current.index + 1 });
+      setDraft({ id: commands.newTaskId(context), index: current.index + 1, fromPull: false });
     } else {
       setDraft(null);
     }
@@ -222,6 +231,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
             key={draft.id}
             id={draft.id}
             heat={heatAt(draft.index, openCount + 1)}
+            skipEnterAnimation={draft.fromPull}
             onCommit={(title, reason) => {
               commitDraft(draft, title, reason);
             }}
@@ -233,7 +243,13 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         ];
 
   return (
-    <section className={styles["screen"]} aria-labelledby={headingId}>
+    <section
+      ref={screenRef}
+      className={styles["screen"]}
+      aria-labelledby={headingId}
+      onPointerDown={pull.onPointerDown}
+      onClickCapture={pull.onClickCapture}
+    >
       <header className={styles["header"]}>
         <h1 id={headingId} className={styles["heading"]}>
           {list.title}
@@ -257,14 +273,28 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           </svg>
         </button>
       </header>
-      <ul ref={listRef} className={styles["list"]} aria-labelledby={headingId}>
-        <AnimatePresence initial={false} mode="popLayout">
-          {rows}
-        </AnimatePresence>
-      </ul>
-      {items.length === 0 && draft === null && (
-        <p className={styles["empty"]}>Nothing to do. Add a task with +.</p>
-      )}
+      <div className={styles["pullArea"]}>
+        <motion.div className={styles["pullContent"]} style={{ y: pull.y }}>
+          {/* Touch only. Everyone else has the "Add task" button. */}
+          <motion.div
+            ref={pullPanelRef}
+            className={styles["pullPanel"]}
+            data-armed={pull.armed}
+            style={{ rotateX: pull.panelTilt }}
+            aria-hidden="true"
+          >
+            {pull.armed ? "Release to add" : "Pull to add a task"}
+          </motion.div>
+          <ul ref={listRef} className={styles["list"]} aria-labelledby={headingId}>
+            <AnimatePresence initial={false} mode="popLayout">
+              {rows}
+            </AnimatePresence>
+          </ul>
+          {items.length === 0 && draft === null && (
+            <p className={styles["empty"]}>Nothing to do. Add a task with +.</p>
+          )}
+        </motion.div>
+      </div>
     </section>
   );
 }

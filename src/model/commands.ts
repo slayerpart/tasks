@@ -2,6 +2,7 @@ import type { MutationOf } from "./mutations.ts";
 import { keyForIndex } from "./order.ts";
 import { completedTasks, openTasks, visibleLists } from "./selectors.ts";
 import type { IsoTimestamp, ListId, MutationId, State, Task, TaskId } from "./types.ts";
+import { randomUuid } from "./uuid.ts";
 
 /** What a command needs from outside: the time and new IDs. Tests give fixed values. */
 export interface CommandContext {
@@ -11,7 +12,7 @@ export interface CommandContext {
 
 export const browserCommandContext = {
   now: () => new Date().toISOString(),
-  newId: () => crypto.randomUUID(),
+  newId: randomUuid,
 } as const satisfies CommandContext;
 
 function base(context: CommandContext) {

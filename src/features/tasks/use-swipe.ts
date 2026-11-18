@@ -1,9 +1,10 @@
 import { useDrag } from "@use-gesture/react";
 import { animate, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
-import { useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
+import { useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import { armedAction, releaseAction, type SwipeAction } from "./swipe.ts";
+import { useClickGuard } from "./use-click-guard.ts";
 
 type PointerDownHandler = (event: PointerEvent) => void;
 
@@ -27,7 +28,7 @@ export function useSwipe(
 ): Swipe {
   const x = useMotionValue(0);
   const [armed, setArmed] = useState<SwipeAction | null>(null);
-  const suppressClick = useRef(false);
+  const clickGuard = useClickGuard();
   const reducedMotion = useReducedMotion();
   const { haptics } = useFeedback();
 
@@ -52,7 +53,7 @@ export function useSwipe(
         }
         return;
       }
-      if (!tap) suppressClick.current = true;
+      if (!tap) clickGuard.arm();
       setArmed(null);
       const velocity = speed * dir;
       const action = releaseAction(offset, velocity, width);
@@ -76,14 +77,9 @@ export function useSwipe(
     x,
     armed,
     onPointerDown: (event) => {
-      suppressClick.current = false;
+      clickGuard.reset();
       if (event.pointerType !== "mouse") onPointerDown?.(event);
     },
-    onClickCapture: (event) => {
-      if (!suppressClick.current) return;
-      suppressClick.current = false;
-      event.preventDefault();
-      event.stopPropagation();
-    },
+    onClickCapture: clickGuard.onClickCapture,
   };
 }

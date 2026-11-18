@@ -37,6 +37,37 @@
   }
 }
 
+/* The pull panel waits above the list, hidden by this clip, until a pull moves the list down. */
+.pullArea {
+  overflow: clip;
+}
+
+.pullContent {
+  position: relative;
+  /* The pull panel folds in toward the user. */
+  perspective: 600px;
+}
+
+.pullPanel {
+  position: absolute;
+  inset-inline: 0;
+  block-size: 4rem;
+  margin-block-start: -4rem;
+  display: flex;
+  align-items: center;
+  padding-inline: 1.25rem;
+  background: var(--color-heat-start);
+  color: oklch(100% 0 0);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transform-origin: bottom;
+}
+
+.pullPanel[data-armed="false"] {
+  color: oklch(100% 0 0 / 0.75);
+}
+
 .list {
   position: relative;
   margin: 0;
