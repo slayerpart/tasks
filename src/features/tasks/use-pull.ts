@@ -43,6 +43,8 @@ export function usePull(
   areaRef: RefObject<HTMLElement | null>,
   panelRef: RefObject<HTMLElement | null>,
   enabled: boolean,
+  /** True while another gesture owns the pointer. A running pull then springs back. */
+  paused: boolean,
   onPull: () => void,
 ): Pull {
   const y = useMotionValue(0);
@@ -54,8 +56,19 @@ export function usePull(
   const clickGuard = useClickGuard();
   const { haptics } = useFeedback();
 
+  function settle(): void {
+    if (reducedMotion === true) y.jump(0);
+    else void animate(y, 0, rowSpring);
+  }
+
   const bind = useDrag(
     ({ first, last, tap, movement: [, distance], cancel }) => {
+      if (paused) {
+        cancel();
+        if (armed) setArmed(false);
+        settle();
+        return;
+      }
       if (first) {
         if (!atTop()) {
           cancel();
@@ -84,8 +97,7 @@ export function usePull(
         // must render and take the focus now, not after this native event handler.
         flushSync(onPull);
       }
-      if (reducedMotion === true) y.jump(0);
-      else void animate(y, 0, rowSpring);
+      settle();
     },
     {
       enabled,

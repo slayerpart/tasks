@@ -5,11 +5,26 @@ type PointerKind = "touch" | "mouse";
 interface DragOptions {
   readonly steps?: number;
   readonly pointerType?: PointerKind;
+  /** How long the pointer stays still before it moves, in ms. */
+  readonly holdMs?: number;
+  /** How long the pointer stays at the end before it goes up, in ms. */
+  readonly endHoldMs?: number;
+  /** False keeps the pointer down at the end, to look at the screen during the gesture. */
+  readonly release?: boolean;
 }
 
 /** Drags a pointer sideways from the center of an element. */
 export function swipe(target: Locator, distance: number, options?: DragOptions): Promise<void> {
   return drag(target, distance, 0, options);
+}
+
+/** Holds a touch still on an element until it picks the row up, then drags it down. */
+export function longPressDrag(
+  target: Locator,
+  distance: number,
+  options?: DragOptions,
+): Promise<void> {
+  return drag(target, 0, distance, { holdMs: 600, ...options });
 }
 
 /** Drags a pointer down from the center of an element. */
@@ -25,7 +40,7 @@ async function drag(
   target: Locator,
   dx: number,
   dy: number,
-  { steps = 8, pointerType = "touch" }: DragOptions = {},
+  { steps = 8, pointerType = "touch", holdMs = 0, endHoldMs = 0, release = true }: DragOptions = {},
 ): Promise<void> {
   await target.evaluate(
     async (element, options) => {
@@ -53,19 +68,26 @@ async function drag(
             clientY: startY + options.dy * progress,
           }),
         );
+      const wait = (ms: number) =>
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, ms);
+        });
       fire("pointerdown", 0);
+      await wait(options.holdMs);
       for (let step = 1; step <= options.steps; step++) {
         await nextFrame();
         fire("pointermove", step / options.steps);
       }
       await nextFrame();
+      await wait(options.endHoldMs);
+      if (!options.release) return;
       fire("pointerup", 1);
       // A browser sends a click when a pointer goes down and up on the same element.
       element.dispatchEvent(
         new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
       );
     },
-    { dx, dy, steps, pointerType },
+    { dx, dy, steps, pointerType, holdMs, endHoldMs, release },
   );
 }
 

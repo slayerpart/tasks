@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import type { TaskId } from "../../model/types.ts";
 import { rowSpring } from "../../ui/motion.ts";
 import styles from "./TaskListScreen.module.css";
@@ -16,6 +16,8 @@ interface DraftRowProps {
 /** A new task that exists only in the UI until the user confirms a title. */
 export function DraftRow({ id, heat, skipEnterAnimation, onCommit, onCancel }: DraftRowProps) {
   const reducedMotion = useReducedMotion();
+  // A row that leaves stays visible during its exit animation, but nobody can reach it.
+  const present = useIsPresent();
   return (
     <motion.li
       // With reduced motion, rows jump to their place. No layout projection runs.
@@ -27,6 +29,7 @@ export function DraftRow({ id, heat, skipEnterAnimation, onCommit, onCancel }: D
       className={styles["row"]}
       data-kind="open"
       data-task-id={id}
+      inert={!present}
       style={{ "--heat": heat }}
     >
       <div className={styles["rowContent"]}>

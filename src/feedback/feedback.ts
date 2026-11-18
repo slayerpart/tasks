@@ -1,4 +1,4 @@
-export type Sound = "complete" | "uncomplete" | "delete" | "add";
+export type Sound = "complete" | "uncomplete" | "delete" | "add" | "pickUp" | "drop";
 
 export interface Sounds {
   readonly play: (sound: Sound) => void;

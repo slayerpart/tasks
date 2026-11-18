@@ -8,6 +8,8 @@ async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
     await page.keyboard.press("Enter");
   }
   await page.keyboard.press("Escape");
+  // The closed draft fades out. Playwright still finds it, because it ignores `inert`.
+  await expect(page.getByRole("textbox")).toHaveCount(0);
 }
 
 function readTasks(page: Page): Promise<{ title: string; done: boolean }[]> {

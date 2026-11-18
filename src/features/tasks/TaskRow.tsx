@@ -1,9 +1,16 @@
-import { motion, useReducedMotion } from "motion/react";
+import {
+  motion,
+  useIsPresent,
+  useMotionTemplate,
+  useReducedMotion,
+  type MotionValue,
+} from "motion/react";
 import { useRef, type KeyboardEvent } from "react";
 import type { DisplayTask } from "../../model/selectors.ts";
 import { rowSpring } from "../../ui/motion.ts";
 import styles from "./TaskListScreen.module.css";
 import { TitleInput, type CommitReason } from "./TitleInput.tsx";
+import { useLongPress, type PointerStart } from "./use-long-press.ts";
 import { useSwipe } from "./use-swipe.ts";
 
 export type RowControl = "check" | "title" | "delete";
@@ -22,6 +29,12 @@ interface TaskRowProps {
   readonly onDelete: () => void;
   readonly onFocus: () => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => void;
+  /** True when the user can drag this row to a new place now. */
+  readonly reorderable: boolean;
+  readonly dragging: boolean;
+  /** The offset of the dragged row from its slot. Only the dragged row uses it. */
+  readonly dragY: MotionValue<number>;
+  readonly onReorderStart: (pointer: PointerStart) => void;
 }
 
 export function TaskRow({
@@ -36,19 +49,29 @@ export function TaskRow({
   onDelete,
   onFocus,
   onKeyDown,
+  reorderable,
+  dragging,
+  dragY,
+  onReorderStart,
 }: TaskRowProps) {
   const { task } = item;
   const tabIndex = tabbable ? 0 : -1;
   const reducedMotion = useReducedMotion();
+  // A row that leaves stays visible during its exit animation, but nobody can reach it.
+  const present = useIsPresent();
   const contentRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipe(contentRef, !editing, (action) => {
+  const swipe = useSwipe(contentRef, !editing, dragging, (action) => {
     if (action === "complete") onToggle();
     else onDelete();
   });
+  const longPress = useLongPress(reorderable && !dragging, onReorderStart);
+  // The CSS `translate` property leaves the transform free for Motion's layout animations.
+  const dragTranslate = useMotionTemplate`0 ${dragY}px`;
   return (
     <motion.li
       // With reduced motion, rows jump to their place. No layout projection runs.
-      layout={reducedMotion === true ? false : "position"}
+      // The dragged row follows the pointer, so it has no layout animation either.
+      layout={reducedMotion === true || dragging ? false : "position"}
       transition={rowSpring}
       initial={skipEnterAnimation ? false : { opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
@@ -56,8 +79,13 @@ export function TaskRow({
       className={styles["row"]}
       data-kind={item.kind}
       data-task-id={task.id}
+      inert={!present}
       data-armed={swipe.armed ?? undefined}
-      style={{ "--heat": item.kind === "open" ? item.heat : 0 }}
+      data-dragging={dragging || undefined}
+      style={{
+        "--heat": item.kind === "open" ? item.heat : 0,
+        translate: dragging ? dragTranslate : "none",
+      }}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
     >
@@ -68,7 +96,10 @@ export function TaskRow({
         className={styles["rowContent"]}
         style={{ x: swipe.x }}
         onClickCapture={swipe.onClickCapture}
-        onPointerDown={swipe.onPointerDown}
+        onPointerDown={(event) => {
+          swipe.onPointerDown(event);
+          longPress.onPointerDown(event);
+        }}
       >
         <span className={styles["checkBox"]}>
           <input
@@ -125,6 +156,22 @@ export function TaskRow({
             />
           </svg>
         </button>
+        {/* Mouse only. Touch uses a long press, and the keyboard uses Alt and the arrow keys. */}
+        <span
+          className={styles["handle"]}
+          data-disabled={!reorderable || undefined}
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            if (!reorderable || event.pointerType !== "mouse" || event.button !== 0) return;
+            // No text selection and no focus change while the row moves.
+            event.preventDefault();
+            onReorderStart({ pointerId: event.pointerId, clientY: event.clientY });
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+            <path d="M5 8h14M5 12h14M5 16h14" />
+          </svg>
+        </span>
       </motion.div>
     </motion.li>
   );

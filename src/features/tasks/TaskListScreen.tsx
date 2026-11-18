@@ -10,7 +10,9 @@ import { DraftRow } from "./DraftRow.tsx";
 import styles from "./TaskListScreen.module.css";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
 import type { CommitReason } from "./TitleInput.tsx";
+import { previewOrder } from "./reorder.ts";
 import { usePull } from "./use-pull.ts";
+import { useReorder } from "./use-reorder.ts";
 
 const context = commands.browserCommandContext;
 
@@ -45,8 +47,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const store = useAppStore();
   const feedback = useFeedback();
   const { state } = useAppSnapshot();
-  const items = displayTasks(state, list.id);
-  const openCount = items.filter((item) => item.kind === "open").length;
+  const storedItems = displayTasks(state, list.id);
+  const openCount = storedItems.filter((item) => item.kind === "open").length;
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const screenRef = useRef<HTMLElement>(null);
@@ -59,6 +61,16 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const focusRequest = useRef<FocusRequest | null>(null);
   /** Tasks that replaced a draft row. They must not play the enter animation again. */
   const fromDraft = useRef(new Set<TaskId>());
+
+  const reorder = useReorder(listRef, openCount, (taskId, to) => {
+    store.dispatch(commands.moveTask(state, context, taskId, to));
+  });
+  const reorderable = draft === null && editingId === null;
+  // While a row moves, the list shows the order that a drop would give.
+  const items =
+    reorder.drag === null
+      ? storedItems
+      : previewOrder(storedItems, reorder.drag.from, reorder.drag.to);
 
   const tabbableId = items.some((item) => item.task.id === activeId)
     ? activeId
@@ -103,7 +115,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     setDraft({ id: commands.newTaskId(context), index, fromPull });
   }
 
-  const pull = usePull(screenRef, pullPanelRef, editingId === null, () => {
+  const pull = usePull(screenRef, pullPanelRef, editingId === null, reorder.drag !== null, () => {
     startDraft(0, true);
   });
 
@@ -220,6 +232,12 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       onKeyDown={(event) => {
         onRowKeyDown(event, item, index);
       }}
+      reorderable={reorderable && item.kind === "open"}
+      dragging={reorder.drag?.taskId === item.task.id}
+      dragY={reorder.dragY}
+      onReorderStart={(pointer) => {
+        reorder.start(item.task.id, index, pointer);
+      }}
     />
   ));
   const rows: ReactNode[] =
@@ -247,8 +265,15 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       ref={screenRef}
       className={styles["screen"]}
       aria-labelledby={headingId}
-      onPointerDown={pull.onPointerDown}
-      onClickCapture={pull.onClickCapture}
+      data-reordering={reorder.drag !== null || undefined}
+      onPointerDown={(event) => {
+        reorder.onPointerDown();
+        pull.onPointerDown(event);
+      }}
+      onClickCapture={(event) => {
+        reorder.onClickCapture(event);
+        pull.onClickCapture(event);
+      }}
     >
       <header className={styles["header"]}>
         <h1 id={headingId} className={styles["heading"]}>

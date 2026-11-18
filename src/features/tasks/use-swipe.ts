@@ -24,6 +24,8 @@ interface Swipe {
 export function useSwipe(
   contentRef: RefObject<HTMLElement | null>,
   enabled: boolean,
+  /** True while another gesture owns the row. A running swipe then springs back. */
+  paused: boolean,
   onSwipe: (action: SwipeAction) => void,
 ): Swipe {
   const x = useMotionValue(0);
@@ -41,7 +43,13 @@ export function useSwipe(
   }
 
   const bind = useDrag(
-    ({ first, last, tap, offset: [offset], velocity: [speed], direction: [dir] }) => {
+    ({ first, last, tap, cancel, offset: [offset], velocity: [speed], direction: [dir] }) => {
+      if (paused) {
+        cancel();
+        if (armed !== null) setArmed(null);
+        settle(0, 0);
+        return;
+      }
       if (first) x.stop();
       const width = contentRef.current?.offsetWidth ?? 0;
       if (!last) {

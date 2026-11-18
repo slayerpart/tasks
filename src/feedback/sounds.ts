@@ -86,6 +86,12 @@ export function createWebAudioSounds(): Sounds {
         case "add":
           tone(ctx, "triangle", 520, 780, volume * 0.8, 0.16);
           break;
+        case "pickUp":
+          tone(ctx, "sine", 880, 1175, volume * 0.6, 0.09);
+          break;
+        case "drop":
+          tone(ctx, "triangle", 392, 262, volume * 0.9, 0.12);
+          break;
       }
     },
   };

@@ -8,6 +8,8 @@ async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
     await page.keyboard.press("Enter");
   }
   await page.keyboard.press("Escape");
+  // The closed draft fades out. Playwright still finds it, because it ignores `inert`.
+  await expect(page.getByRole("textbox")).toHaveCount(0);
 }
 
 function titles(page: Page): Promise<string[]> {
@@ -31,6 +33,20 @@ test("a pull down past one row adds a task at the top", async ({ page }) => {
   await page.keyboard.press("Escape");
 
   await expect.poll(() => titles(page)).toEqual(["Tea", "Milk", "Bread"]);
+});
+
+test("the last task stays visible while the list is pulled down", async ({ page }) => {
+  await addTasks(page, ["Milk", "Bread", "Eggs"]);
+  const last = page.getByRole("button", { name: "Edit Eggs" });
+
+  await pull(page.getByRole("button", { name: "Edit Milk" }), 120, { release: false });
+
+  const bottomVisible = await last.evaluate((title) => {
+    const box = title.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + 10, box.bottom - 4);
+    return title.closest("li")?.contains(hit) ?? false;
+  });
+  expect(bottomVisible).toBe(true);
 });
 
 test("a pull works on an empty list", async ({ page }) => {

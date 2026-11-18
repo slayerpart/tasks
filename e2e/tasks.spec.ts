@@ -9,6 +9,8 @@ async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
     await page.keyboard.press("Enter");
   }
   await page.keyboard.press("Escape");
+  // The closed draft fades out. Playwright still finds it, because it ignores `inert`.
+  await expect(page.getByRole("textbox")).toHaveCount(0);
 }
 
 /** Reads the task rows at this moment, without waiting for animations. */
@@ -94,6 +96,28 @@ test("acts on input at once while rows are still animating", async ({ page }) =>
     { title: "Milk", done: true },
   ]);
   expect(milkTransform).not.toBe("none");
+});
+
+test("a row that leaves cannot be reached during its exit animation", async ({
+  page,
+  hasTouch,
+}) => {
+  await addTasks(page, ["Milk", "Bread"]);
+  await page.getByRole("button", { name: "Add task" }).click();
+  await page.keyboard.press("Escape");
+  await deleteTask(page, hasTouch, "Milk");
+
+  // No wait: the rows are still in their exit animations. Playwright ignores `inert` in
+  // its role queries, so the test checks that focus cannot reach the leaving controls.
+  const leaving = page.getByRole("textbox").or(page.getByRole("checkbox", { name: "Milk" }));
+  const focusable = await leaving.evaluateAll((controls) =>
+    controls.map((control) => {
+      if (control instanceof HTMLElement) control.focus();
+      return document.activeElement === control;
+    }),
+  );
+  expect(focusable).toEqual(focusable.map(() => false));
+  expect(focusable.length).toBeGreaterThan(0);
 });
 
 test.describe("with reduced motion", () => {

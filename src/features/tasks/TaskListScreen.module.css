@@ -37,9 +37,13 @@
   }
 }
 
-/* The pull panel waits above the list, hidden by this clip, until a pull moves the list down. */
+/*
+ * The pull panel waits above the list, hidden by this clip, until a pull moves the list down.
+ * The clip cuts only above the list. Rows that a pull moves down, and a lifted row that is
+ * wider than the list, stay visible.
+ */
 .pullArea {
-  overflow: clip;
+  clip-path: inset(0 -100vw -100vh);
 }
 
 .pullContent {
@@ -90,7 +94,22 @@
   overflow: hidden;
   background: var(--color-swipe-track);
   color: var(--row-text);
-  transition: background-color 120ms ease-out;
+  transition:
+    background-color 120ms ease-out,
+    scale 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+/* A row that the user drags lifts above the others. */
+.row[data-dragging] {
+  z-index: 2;
+  scale: 1.03;
+  box-shadow: 0 0.75rem 1.75rem oklch(0% 0 0 / 0.3);
+}
+
+.screen[data-reordering],
+.screen[data-reordering] * {
+  cursor: grabbing;
 }
 
 .row[data-armed="complete"] {
@@ -145,6 +164,9 @@
     inset 0 -1px 0 oklch(0% 0 0 / 0.08);
   /* The browser scrolls vertically. Sideways moves are swipes. */
   touch-action: pan-y;
+  /* A long press picks the row up. It must not select text or open a menu. */
+  user-select: none;
+  -webkit-touch-callout: none;
   /* Heat colors follow the position of a row. A paint-only transition, no layout. */
   transition: background-color 280ms ease-out;
 }
@@ -279,18 +301,39 @@
   border-radius: 50%;
 }
 
+.handle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+
+.handle[data-disabled] {
+  visibility: hidden;
+}
+
 /* With a mouse, the row controls appear on hover or focus. */
 @media (hover: hover) {
   .checkBox:has(.check:not(:checked)),
-  .delete {
+  .delete,
+  .handle {
     opacity: 0;
     transition: opacity 150ms ease-out;
   }
 
-  .row:hover .checkBox,
-  .row:hover .delete,
-  .row:focus-within .checkBox,
-  .row:focus-within .delete {
+  .row:hover :is(.checkBox, .delete, .handle),
+  .row:focus-within :is(.checkBox, .delete, .handle),
+  .row[data-dragging] .handle {
     opacity: 1;
   }
 }
@@ -307,6 +350,10 @@
  * and they appear when they get keyboard focus.
  */
 @media (hover: none) {
+  .handle {
+    display: none;
+  }
+
   .row:not(:has([data-control]:focus-visible)) :is(.checkBox, .delete),
   .checkPlaceholder {
     position: absolute;
@@ -328,7 +375,12 @@
   .rowContent,
   .swipeIcon,
   .checkBox,
-  .delete {
+  .delete,
+  .handle {
     transition: none;
+  }
+
+  .row[data-dragging] {
+    scale: none;
   }
 }
