@@ -63,6 +63,29 @@ for (const taskCount of [0, 1]) {
   });
 }
 
+test("on a phone, the tips stay behind the tasks", async ({ page, hasTouch }) => {
+  test.skip(!hasTouch, "Only touch screens center the tips.");
+  // On a short screen, the tasks reach the center, where the tips are.
+  await page.setViewportSize({ width: 390, height: 280 });
+  await addTask(page, "Milk");
+  await addTask(page, "Eggs");
+  const row = await page.getByRole("listitem").filter({ hasText: "Eggs" }).boundingBox();
+  if (row === null) throw new Error("The row has no layout.");
+  // Paint order is also hit-test order. The tips let touches through, so they get hits here.
+  await page.addStyleTag({ content: "[aria-label='Tips'] { pointer-events: auto !important; }" });
+
+  const hit = await page.evaluate(
+    ([x, y]) => {
+      const element = document.elementFromPoint(x, y);
+      if (element?.closest("[aria-label='Tips']")) return "Tips";
+      return element?.closest("li")?.textContent ?? "";
+    },
+    [row.x + row.width / 2, row.y + row.height / 2] as const,
+  );
+
+  expect(hit).toContain("Eggs");
+});
+
 test("the tip to add a task goes away while the user adds the first task", async ({ page }) => {
   await page.getByRole("button", { name: "Add task" }).click();
 

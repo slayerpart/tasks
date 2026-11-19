@@ -51,6 +51,9 @@
  */
 .pullArea {
   clip-path: inset(0 -100vw -100vh);
+  /* The tasks stay in front of the tips. */
+  position: relative;
+  z-index: 1;
 }
 
 .pullContent {
@@ -112,6 +115,44 @@
   z-index: 2;
   scale: 1.03;
   box-shadow: 0 0.75rem 1.75rem oklch(0% 0 0 / 0.3);
+}
+
+/* Two spreading fingers move the rows apart. The hook sets --pinch, so no render runs. */
+.row[data-pinch="above"] {
+  translate: 0 calc(var(--pinch, 0px) * -0.5);
+}
+
+.row[data-pinch="below"] {
+  translate: 0 calc(var(--pinch, 0px) * 0.5);
+}
+
+/* The new task between the spreading rows. It opens from its middle as the fingers spread. */
+.pinchPanel {
+  --row-surface: color-mix(
+    in oklch,
+    var(--color-heat-start),
+    var(--color-heat-end) calc(var(--heat, 0) * 100%)
+  );
+
+  position: absolute;
+  z-index: 1;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  /* It grows with a spread wider than one row, so no gap shows next to it. */
+  block-size: max(4rem, var(--pinch, 0px));
+  padding-inline: 1.25rem;
+  translate: 0 -50%;
+  clip-path: inset(max(0px, calc(50% - var(--pinch, 0px) / 2)) 0);
+  background: var(--row-surface);
+  color: oklch(100% 0 0 / 0.75);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.pinchPanel[data-armed="true"] {
+  color: oklch(100% 0 0);
 }
 
 .screen[data-reordering],
@@ -342,6 +383,27 @@
   }
 }
 
+/* The gap that opens between two tasks when the mouse rests on the line between them. */
+.insertGap {
+  display: grid;
+  place-items: center;
+  block-size: 2.75rem;
+  color: var(--color-completed-text);
+  cursor: pointer;
+}
+
+.insertGapLabel {
+  padding: 0.25rem 0.875rem;
+  border: 1px dashed currentColor;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.insertGap:hover .insertGapLabel {
+  border-style: solid;
+}
+
 .hints {
   display: grid;
   gap: 0.625rem;
@@ -357,10 +419,15 @@
   display: none;
 }
 
-/* On touch screens, the hints sit in the center of the viewport. Touches go through them. */
+/*
+ * On touch screens, the hints sit in the center of the screen. Touches go through them.
+ * The large viewport does not change when the browser bars show or hide, so the hints stay still.
+ */
 .hints[data-mode="touch"] {
   position: fixed;
-  inset: 0;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 100lvh;
   align-content: center;
   justify-items: center;
   text-align: center;

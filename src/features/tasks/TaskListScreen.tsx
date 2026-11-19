@@ -7,12 +7,15 @@ import * as commands from "../../model/commands.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { TaskId, TaskList } from "../../model/types.ts";
 import { DraftRow } from "./DraftRow.tsx";
+import { rowSpring } from "../../ui/motion.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
 import { Hints } from "./Hints.tsx";
 import styles from "./TaskListScreen.module.css";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
 import type { CommitReason } from "./TitleInput.tsx";
 import { previewOrder } from "./reorder.ts";
+import { useHoverInsert } from "./use-hover-insert.ts";
+import { usePinchInsert } from "./use-pinch-insert.ts";
 import { usePull } from "./use-pull.ts";
 import { useReorder } from "./use-reorder.ts";
 
@@ -22,8 +25,8 @@ interface Draft {
   readonly id: TaskId;
   /** The position among the open tasks. */
   readonly index: number;
-  /** True when the draft replaces the pull panel, which is already visible. */
-  readonly fromPull: boolean;
+  /** True when the draft replaces a gesture panel, which is already visible. */
+  readonly fromGesture: boolean;
 }
 
 interface FocusRequest {
@@ -55,6 +58,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const listRef = useRef<HTMLUListElement>(null);
   const screenRef = useRef<HTMLElement>(null);
   const pullPanelRef = useRef<HTMLDivElement>(null);
+  const pullContentRef = useRef<HTMLDivElement>(null);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editingId, setEditingId] = useState<TaskId | null>(null);
@@ -71,6 +75,19 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   });
   const reorderable = draft === null && editingId === null;
   const inputMode = useInputMode();
+  const pinchInsert = usePinchInsert(
+    pullContentRef,
+    listRef,
+    reorderable && reorder.drag === null,
+    (index) => {
+      startDraft(index, true);
+    },
+  );
+  const pinch = pinchInsert.pinch;
+  const hoverInsert = useHoverInsert(
+    listRef,
+    reorderable && reorder.drag === null && inputMode === "pointer",
+  );
   // While a row moves, the list shows the order that a drop would give.
   const items =
     reorder.drag === null
@@ -116,14 +133,21 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     focusRequest.current = request;
   }
 
-  function startDraft(index: number, fromPull = false): void {
+  function startDraft(index: number, fromGesture = false): void {
+    hoverInsert.close();
     setEditingId(null);
-    setDraft({ id: commands.newTaskId(context), index, fromPull });
+    setDraft({ id: commands.newTaskId(context), index, fromGesture });
   }
 
-  const pull = usePull(screenRef, pullPanelRef, editingId === null, reorder.drag !== null, () => {
-    startDraft(0, true);
-  });
+  const pull = usePull(
+    screenRef,
+    pullPanelRef,
+    editingId === null,
+    reorder.drag !== null || pinch !== null,
+    () => {
+      startDraft(0, true);
+    },
+  );
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
     if (title === "") {
@@ -135,7 +159,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     signal("add");
     setActiveId(current.id);
     if (reason === "enter") {
-      setDraft({ id: commands.newTaskId(context), index: current.index + 1, fromPull: false });
+      setDraft({ id: commands.newTaskId(context), index: current.index + 1, fromGesture: false });
     } else {
       setDraft(null);
     }
@@ -238,7 +262,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       onKeyDown={(event) => {
         onRowKeyDown(event, item, index);
       }}
-      reorderable={reorderable && item.kind === "open"}
+      reorderable={reorderable && item.kind === "open" && pinch === null}
+      pinchSide={pinch === null ? null : index < pinch.index ? "above" : "below"}
       dragging={reorder.drag?.taskId === item.task.id}
       dragY={reorder.dragY}
       onReorderStart={(pointer) => {
@@ -246,25 +271,47 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       }}
     />
   ));
+  const gap = hoverInsert.gap;
   const rows: ReactNode[] =
-    draft === null
-      ? taskRows
-      : [
-          ...taskRows.slice(0, draft.index),
-          <DraftRow
-            key={draft.id}
-            id={draft.id}
-            heat={heatAt(draft.index, openCount + 1)}
-            skipEnterAnimation={draft.fromPull}
-            onCommit={(title, reason) => {
-              commitDraft(draft, title, reason);
+    draft === null && gap !== null
+      ? [
+          ...taskRows.slice(0, gap),
+          // Mouse only. The keyboard adds a task below another one with Enter.
+          <motion.li
+            key="insert-gap"
+            className={styles["insertGap"]}
+            layout="position"
+            transition={rowSpring}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            aria-hidden="true"
+            onClick={() => {
+              startDraft(gap);
             }}
-            onCancel={() => {
-              setDraft(null);
-            }}
-          />,
-          ...taskRows.slice(draft.index),
-        ];
+          >
+            <span className={styles["insertGapLabel"]}>+ Add task</span>
+          </motion.li>,
+          ...taskRows.slice(gap),
+        ]
+      : draft === null
+        ? taskRows
+        : [
+            ...taskRows.slice(0, draft.index),
+            <DraftRow
+              key={draft.id}
+              id={draft.id}
+              heat={heatAt(draft.index, openCount + 1)}
+              skipEnterAnimation={draft.fromGesture}
+              onCommit={(title, reason) => {
+                commitDraft(draft, title, reason);
+              }}
+              onCancel={() => {
+                setDraft(null);
+              }}
+            />,
+            ...taskRows.slice(draft.index),
+          ];
 
   return (
     <section
@@ -305,7 +352,18 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         </button>
       </header>
       <div className={styles["pullArea"]}>
-        <motion.div className={styles["pullContent"]} style={{ y: pull.y }}>
+        <motion.div ref={pullContentRef} className={styles["pullContent"]} style={{ y: pull.y }}>
+          {pinch !== null && (
+            // Touch only. A screen reader user adds a task with the "Add task" button.
+            <div
+              className={styles["pinchPanel"]}
+              data-armed={pinch.armed}
+              style={{ top: pinch.lineTop, "--heat": heatAt(pinch.index, openCount + 1) }}
+              aria-hidden="true"
+            >
+              {pinch.armed ? "Release to add" : "Spread to add"}
+            </div>
+          )}
           {/* Touch only. Everyone else has the "Add task" button. */}
           <motion.div
             ref={pullPanelRef}
@@ -316,7 +374,14 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           >
             {pull.armed ? "Release to add" : "Pull to add a task"}
           </motion.div>
-          <ul ref={listRef} className={styles["list"]} aria-labelledby={headingId}>
+          <ul
+            ref={listRef}
+            className={styles["list"]}
+            aria-labelledby={headingId}
+            onPointerDown={pinchInsert.onPointerDown}
+            onPointerMove={hoverInsert.onPointerMove}
+            onPointerLeave={hoverInsert.onPointerLeave}
+          >
             <AnimatePresence initial={false} mode="popLayout">
               {rows}
             </AnimatePresence>

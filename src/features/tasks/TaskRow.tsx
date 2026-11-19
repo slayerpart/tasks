@@ -35,6 +35,8 @@ interface TaskRowProps {
   /** The offset of the dragged row from its slot. Only the dragged row uses it. */
   readonly dragY: MotionValue<number>;
   readonly onReorderStart: (pointer: PointerStart) => void;
+  /** During a pinch, rows above the new task move up and rows below it move down. */
+  readonly pinchSide: "above" | "below" | null;
 }
 
 export function TaskRow({
@@ -53,6 +55,7 @@ export function TaskRow({
   dragging,
   dragY,
   onReorderStart,
+  pinchSide,
 }: TaskRowProps) {
   const { task } = item;
   const tabIndex = tabbable ? 0 : -1;
@@ -60,7 +63,7 @@ export function TaskRow({
   // A row that leaves stays visible during its exit animation, but nobody can reach it.
   const present = useIsPresent();
   const contentRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipe(contentRef, !editing, dragging, (action) => {
+  const swipe = useSwipe(contentRef, !editing, dragging || pinchSide !== null, (action) => {
     if (action === "complete") onToggle();
     else onDelete();
   });
@@ -82,9 +85,10 @@ export function TaskRow({
       inert={!present}
       data-armed={swipe.armed ?? undefined}
       data-dragging={dragging || undefined}
+      data-pinch={pinchSide ?? undefined}
       style={{
         "--heat": item.kind === "open" ? item.heat : 0,
-        translate: dragging ? dragTranslate : "none",
+        ...(dragging && { translate: dragTranslate }),
       }}
       onFocus={onFocus}
       onKeyDown={onKeyDown}

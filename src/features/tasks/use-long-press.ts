@@ -16,6 +16,11 @@ export function useLongPress(
 ): { readonly onPointerDown: (event: PointerEvent) => void } {
   const cancel = useRef<(() => void) | null>(null);
 
+  useEffect(() => {
+    // Another gesture, such as a second finger, can turn the press off while it waits.
+    if (!enabled) cancel.current?.();
+  }, [enabled]);
+
   useEffect(
     () => () => {
       cancel.current?.();
