@@ -1,6 +1,13 @@
+/* The screen fills the viewport, so the free space below the list can take taps. */
 .screen {
   display: flex;
   flex-direction: column;
+  min-block-size: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+.tapArea {
+  flex: 1;
+  min-block-size: 4rem;
 }
 
 .header {
@@ -164,9 +171,6 @@
     inset 0 -1px 0 oklch(0% 0 0 / 0.08);
   /* The browser scrolls vertically. Sideways moves are swipes. */
   touch-action: pan-y;
-  /* A long press picks the row up. It must not select text or open a menu. */
-  user-select: none;
-  -webkit-touch-callout: none;
   /* Heat colors follow the position of a row. A paint-only transition, no layout. */
   transition: background-color 280ms ease-out;
 }
@@ -338,11 +342,42 @@
   }
 }
 
-.empty {
+.hints {
+  display: grid;
+  gap: 0.625rem;
   margin: 0;
-  padding: 2rem 1.25rem;
+  padding: 1.5rem 1.25rem;
+  list-style: none;
   color: var(--color-completed-text);
-  font-size: 1.125rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.hints:empty {
+  display: none;
+}
+
+/* On touch screens, the hints sit in the center of the viewport. Touches go through them. */
+.hints[data-mode="touch"] {
+  position: fixed;
+  inset: 0;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.key {
+  display: inline-block;
+  min-inline-size: 1.5em;
+  margin-inline: 0.125em;
+  padding: 0 0.375em;
+  border: 1px solid currentColor;
+  border-radius: 0.3125rem;
+  font: inherit;
+  font-size: 0.875em;
+  line-height: 1.5;
+  text-align: center;
 }
 
 /*

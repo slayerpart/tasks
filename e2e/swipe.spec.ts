@@ -114,3 +114,35 @@ test("on touch screens, the row controls are hidden until they get keyboard focu
   await expect(check).toBeFocused();
   expect(await visibleWidth()).toBeGreaterThan(20);
 });
+
+for (const [direction, distance] of [
+  ["right", 160],
+  ["left", -160],
+] as const) {
+  test(`a swipe to the ${direction} vibrates once when it passes the threshold`, async ({
+    page,
+  }) => {
+    // The test records each vibration. Browsers without the vibration API get it, too.
+    await page.addInitScript(() => {
+      const calls: unknown[] = [];
+      Object.defineProperty(window, "vibrations", { value: calls });
+      Object.defineProperty(navigator, "vibrate", {
+        configurable: true,
+        value: (pattern: unknown) => {
+          calls.push(pattern);
+          return true;
+        },
+      });
+    });
+    // The tasks from beforeEach stay after the reload.
+    await page.reload();
+    const vibrations = () =>
+      page.evaluate(() => (Reflect.get(window, "vibrations") as unknown[]).length);
+    const before = await vibrations();
+
+    // The finger stays down past the threshold, so only the threshold can vibrate.
+    await swipe(row(page, "Milk"), distance, { release: false });
+
+    expect((await vibrations()) - before).toBe(1);
+  });
+}

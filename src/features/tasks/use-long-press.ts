@@ -39,10 +39,6 @@ export function useLongPress(
       const onEnd = (end: globalThis.PointerEvent) => {
         if (end.pointerId === pointerId) stop();
       };
-      // iOS starts a text selection after a long press. CSS alone does not stop it.
-      const onSelectStart = (select: Event) => {
-        select.preventDefault();
-      };
       const timer = window.setTimeout(() => {
         stop();
         onLongPress({ pointerId, clientY });
@@ -52,13 +48,11 @@ export function useLongPress(
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onEnd);
         window.removeEventListener("pointercancel", onEnd);
-        document.removeEventListener("selectstart", onSelectStart);
         cancel.current = null;
       }
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onEnd);
       window.addEventListener("pointercancel", onEnd);
-      document.addEventListener("selectstart", onSelectStart);
       cancel.current = stop;
     },
   };

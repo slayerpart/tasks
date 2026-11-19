@@ -7,6 +7,8 @@ import * as commands from "../../model/commands.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { TaskId, TaskList } from "../../model/types.ts";
 import { DraftRow } from "./DraftRow.tsx";
+import { useInputMode } from "../../ui/use-input-mode.ts";
+import { Hints } from "./Hints.tsx";
 import styles from "./TaskListScreen.module.css";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
 import type { CommitReason } from "./TitleInput.tsx";
@@ -59,6 +61,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const [activeId, setActiveId] = useState<TaskId | null>(null);
   /** Focus to move after the next render. Every request comes with a state change that renders. */
   const focusRequest = useRef<FocusRequest | null>(null);
+  /** True when a task was open for its title as the current press began. */
+  const openAtPress = useRef(false);
   /** Tasks that replaced a draft row. They must not play the enter animation again. */
   const fromDraft = useRef(new Set<TaskId>());
 
@@ -66,11 +70,13 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     store.dispatch(commands.moveTask(state, context, taskId, to));
   });
   const reorderable = draft === null && editingId === null;
+  const inputMode = useInputMode();
   // While a row moves, the list shows the order that a drop would give.
   const items =
     reorder.drag === null
       ? storedItems
       : previewOrder(storedItems, reorder.drag.from, reorder.drag.to);
+  const hints = <Hints mode={inputMode} taskCount={items.length} adding={draft !== null} />;
 
   const tabbableId = items.some((item) => item.task.id === activeId)
     ? activeId
@@ -305,7 +311,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
             ref={pullPanelRef}
             className={styles["pullPanel"]}
             data-armed={pull.armed}
-            style={{ rotateX: pull.panelTilt }}
+            style={{ rotateX: pull.panelTilt, opacity: pull.panelOpacity }}
             aria-hidden="true"
           >
             {pull.armed ? "Release to add" : "Pull to add a task"}
@@ -315,11 +321,30 @@ export function TaskListScreen({ list }: { list: TaskList }) {
               {rows}
             </AnimatePresence>
           </ul>
-          {items.length === 0 && draft === null && (
-            <p className={styles["empty"]}>Nothing to do. Add a task with +.</p>
-          )}
+          {inputMode === "pointer" && hints}
         </motion.div>
       </div>
+      {inputMode === "touch" && (
+        // Touch only, like Clear: a tap on the free space below the list adds a task at the
+        // end of the open tasks. Everyone else has the "Add task" button.
+        <div
+          className={styles["tapArea"]}
+          aria-hidden="true"
+          onPointerDown={() => {
+            openAtPress.current = draft !== null || editingId !== null;
+          }}
+          onClick={() => {
+            if (!openAtPress.current) {
+              startDraft(openCount);
+            } else if (document.activeElement instanceof HTMLElement) {
+              // Safari keeps a text field focused after a tap on space that takes no focus.
+              document.activeElement.blur();
+            }
+          }}
+        />
+      )}
+      {/* Outside the moving list: its perspective would make the fixed position relative to it. */}
+      {inputMode === "touch" && hints}
     </section>
   );
 }

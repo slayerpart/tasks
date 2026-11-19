@@ -79,7 +79,11 @@ describe("App", () => {
     await user.click(screen.getByRole("heading", { name: "Tasks" }));
 
     expect(titles()).toEqual([]);
-    expect(screen.getByText("Nothing to do. Add a task with +.")).toBeDefined();
+    expect(
+      within(screen.getByRole("list", { name: "Tips" }))
+        .getAllByRole("listitem")
+        .map((tip) => tip.textContent),
+    ).toEqual(["Click + or press N to add a task"]);
   });
 
   it("moves a completed task below the open tasks, and back to the end when uncompleted", async () => {
@@ -208,5 +212,28 @@ describe("App", () => {
     await user.keyboard("{Enter}{Escape}");
 
     expect(feedback).toEqual([]);
+  });
+
+  it("shows tips step by step until the list has 3 tasks", async () => {
+    const { user } = await renderApp();
+    const tips = () =>
+      within(screen.getByRole("list", { name: "Tips" }))
+        .queryAllByRole("listitem")
+        .map((tip) => tip.textContent);
+
+    expect(tips()).toEqual(["Click + or press N to add a task"]);
+
+    await addTasks(user, ["Milk"]);
+    await waitFor(() => {
+      expect(tips()).toEqual([
+        "Hover a task, then click ○ to complete it or × to delete it",
+        "Or press X to complete or Delete to delete the selected task",
+      ]);
+    });
+
+    await addTasks(user, ["Bread", "Eggs"]);
+    await waitFor(() => {
+      expect(tips()).toEqual([]);
+    });
   });
 });

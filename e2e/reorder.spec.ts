@@ -50,18 +50,6 @@ test.describe("on touch", () => {
     expect(await titles(page)).toEqual(["Milk", "Bread", "Eggs", "Tea"]);
   });
 
-  test("a long press and the drag after it cannot start a text selection", async ({ page }) => {
-    const target = title(page, "Milk");
-    const selectionStarts = () =>
-      target.evaluate((element) =>
-        element.dispatchEvent(new Event("selectstart", { bubbles: true, cancelable: true })),
-      );
-
-    await longPressDrag(target, 40, { release: false });
-
-    expect(await selectionStarts()).toBe(false);
-  });
-
   test("a drag without a hold does not move a task", async ({ page }) => {
     const rowHeight = (await page.getByRole("listitem").first().boundingBox())?.height ?? 0;
 

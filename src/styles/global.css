@@ -23,6 +23,18 @@ body {
   min-height: 100dvh;
   background: var(--color-surface, Canvas);
   color: var(--color-text, CanvasText);
+  /*
+   * Like a native app, the page has no text selection and no long-press menu. On iOS, a long
+   * press can select text near the finger, so rows alone are not enough. Text fields keep both.
+   */
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 :focus-visible {

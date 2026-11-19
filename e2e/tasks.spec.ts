@@ -120,6 +120,34 @@ test("a row that leaves cannot be reached during its exit animation", async ({
   expect(focusable.length).toBeGreaterThan(0);
 });
 
+test("text cannot be selected outside text fields, like in a native app", async ({ page }) => {
+  await addTasks(page, ["Milk"]);
+  const heading = await page.getByRole("heading", { name: "Tasks" }).boundingBox();
+  const title = await page.getByRole("button", { name: "Edit Milk" }).boundingBox();
+  if (heading === null || title === null) throw new Error("The page has no layout.");
+
+  await page.mouse.move(heading.x + 2, heading.y + heading.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(title.x + title.width - 2, title.y + title.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  expect(await page.evaluate(() => document.getSelection()?.toString() ?? "")).toBe("");
+});
+
+test("text in a text field can still be selected", async ({ page }) => {
+  await addTasks(page, ["Milk"]);
+  await page.getByRole("button", { name: "Edit Milk" }).click();
+  const field = page.getByRole("textbox", { name: "Task title" });
+
+  await field.selectText();
+
+  expect(
+    await field.evaluate((input) =>
+      input instanceof HTMLInputElement ? [input.selectionStart, input.selectionEnd] : [],
+    ),
+  ).toEqual([0, 4]);
+});
+
 test.describe("with reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
 

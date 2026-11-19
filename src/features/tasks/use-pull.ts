@@ -25,6 +25,11 @@ interface Pull {
   readonly y: MotionValue<number>;
   /** The tilt of the panel above the list, in degrees. It flattens as the list moves down. */
   readonly panelTilt: MotionValue<number>;
+  /**
+   * The panel is invisible at rest. Safari does not always clip a 3D-transformed layer, so
+   * the clip above the list alone could let the tilted panel show.
+   */
+  readonly panelOpacity: MotionValue<number>;
   readonly armed: boolean;
   readonly onPointerDown: (event: PointerEvent) => void;
   /** Stops the click that a browser can send at the end of a pull. */
@@ -50,6 +55,7 @@ export function usePull(
   const y = useMotionValue(0);
   const reducedMotion = useReducedMotion();
   const panelTilt = useTransform(y, [0, 64], reducedMotion === true ? [0, 0] : [70, 0]);
+  const panelOpacity = useTransform(y, [0, 8], [0, 1]);
   const [armed, setArmed] = useState(false);
   /** Where the list was when the touch began. A touch can catch it on its way back. */
   const start = useRef(0);
@@ -136,6 +142,7 @@ export function usePull(
   return {
     y,
     panelTilt,
+    panelOpacity,
     armed,
     onPointerDown: (event) => {
       clickGuard.reset();

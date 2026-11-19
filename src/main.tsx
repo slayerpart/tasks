@@ -9,6 +9,7 @@ import { createBrowserHaptics } from "./feedback/haptics.ts";
 import { createWebAudioSounds } from "./feedback/sounds.ts";
 import { openLocalStore } from "./storage/local-store.ts";
 import { applyTheme, defaultTheme } from "./theme/theme.ts";
+import { guardAgainstTextSelection } from "./ui/selection-guard.ts";
 import "./styles/global.css";
 
 const databaseName = "tasks";
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
     throw new Error("The #root element is missing from index.html.");
   }
   applyTheme(defaultTheme, document.documentElement);
+  guardAgainstTextSelection(document);
 
   const store = await openAppStore(await openLocalStore(databaseName));
   const feedback = {

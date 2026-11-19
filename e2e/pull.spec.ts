@@ -49,8 +49,13 @@ test("the last task stays visible while the list is pulled down", async ({ page 
   expect(bottomVisible).toBe(true);
 });
 
+test("the pull panel is invisible until a pull starts", async ({ page }) => {
+  // The panel is decoration only, so the test finds it by its text.
+  await expect(page.getByText("Pull to add a task")).toHaveCSS("opacity", "0");
+});
+
 test("a pull works on an empty list", async ({ page }) => {
-  await pull(page.getByText("Nothing to do. Add a task with +."), 140);
+  await pull(page.getByRole("list", { name: "Tips" }), 140);
 
   await expect(page.getByRole("textbox", { name: "New task" })).toBeFocused();
 });

@@ -98,8 +98,7 @@ export function useReorder(
       if (reducedMotion === true) dragY.jump(0);
       else void animate(dragY, 0, rowSpring);
     };
-    // The page must not scroll under the finger, and a long press must not open a menu
-    // or select text.
+    // The page must not scroll under the finger, and a long press must not open a menu.
     const preventDefault = (event: Event) => {
       if (event.cancelable) event.preventDefault();
     };
@@ -111,7 +110,6 @@ export function useReorder(
       window.removeEventListener("pointercancel", onEnd);
       document.removeEventListener("touchmove", preventDefault);
       document.removeEventListener("contextmenu", preventDefault);
-      document.removeEventListener("selectstart", preventDefault);
       stop.current = null;
     }
 
@@ -120,8 +118,6 @@ export function useReorder(
     window.addEventListener("pointercancel", onEnd);
     document.addEventListener("touchmove", preventDefault, { passive: false });
     document.addEventListener("contextmenu", preventDefault);
-    document.addEventListener("selectstart", preventDefault);
-    window.getSelection()?.removeAllRanges();
     stop.current = finish;
     frame = requestAnimationFrame(scrollNearEdges);
 
