@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.tsx";
 import { openAppStore } from "./app/store.ts";
 import { StoreProvider } from "./app/store-context.tsx";
@@ -11,7 +11,11 @@ import { createRecordingFeedback } from "./test/recording-feedback.ts";
 async function renderApp() {
   const store = await openAppStore(createMemoryLocalStore());
   const { feedback, events } = createRecordingFeedback();
-  const user = userEvent.setup();
+  const user = userEvent.setup({
+    advanceTimers: (ms) => {
+      if (vi.isFakeTimers()) vi.advanceTimersByTime(ms);
+    },
+  });
   render(
     <StoreProvider store={store}>
       <FeedbackProvider feedback={feedback}>
@@ -234,6 +238,98 @@ describe("App", () => {
     await addTasks(user, ["Bread", "Eggs"]);
     await waitFor(() => {
       expect(tips()).toEqual([]);
+    });
+  });
+});
+
+describe("undo", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The toast, unless it is gone or leaving. A leaving toast is inert. */
+  function toast() {
+    const card = screen.queryByRole("button", { name: "Undo" })?.closest("[data-toast]");
+    return card === undefined || card === null || card.hasAttribute("inert") ? null : card;
+  }
+
+  it("shows a toast after a delete, and its Undo button brings the task back with focus", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(screen.getByRole("button", { name: "Delete Milk" }));
+    expect(toast()?.textContent).toContain("Deleted “Milk”");
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(titles()).toEqual(["Milk", "Bread"]);
+    });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Milk" }));
+    await waitFor(() => {
+      expect(toast()).toBeNull();
+    });
+  });
+
+  it.each([
+    ["Meta", "macOS"],
+    ["Control", "other systems"],
+  ])("undoes the changes one by one with %s+Z on %s", async (modifier) => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    await user.click(screen.getByRole("checkbox", { name: "Milk" }));
+
+    await user.keyboard(`{${modifier}>}z{/${modifier}}`);
+    expect(tasks()).toEqual([
+      { title: "Milk", done: false },
+      { title: "Bread", done: false },
+    ]);
+
+    await user.keyboard(`{${modifier}>}z{/${modifier}}`);
+    await waitFor(() => {
+      expect(titles()).toEqual(["Milk"]);
+    });
+  });
+
+  it("leaves Cmd+Z to a text field", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk"]);
+
+    await user.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    expect(titles()).toEqual(["Milk"]);
+  });
+
+  it("plays the sound of the change that undo makes", async () => {
+    const { user, feedback } = await renderApp();
+    await addTasks(user, ["Milk"]);
+    await user.click(screen.getByRole("button", { name: "Delete Milk" }));
+    feedback.length = 0;
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(feedback).toEqual([{ kind: "sound", sound: "add" }, { kind: "tap" }]);
+  });
+
+  it("closes the toast after 5 seconds, but not while the pointer is on it", async () => {
+    // Testing Library waits with setTimeout. The fake clock must also follow real time.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    await user.click(screen.getByRole("button", { name: "Delete Milk" }));
+
+    await user.hover(screen.getByRole("button", { name: "Undo" }));
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(toast()).not.toBeNull();
+
+    await user.unhover(screen.getByRole("button", { name: "Undo" }));
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    await waitFor(() => {
+      expect(toast()).toBeNull();
     });
   });
 });

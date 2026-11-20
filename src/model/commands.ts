@@ -15,7 +15,8 @@ export const browserCommandContext = {
   newId: randomUuid,
 } as const satisfies CommandContext;
 
-function base(context: CommandContext) {
+/** The fields that every mutation needs. */
+export function mutationBase(context: CommandContext) {
   return { mutationId: context.newId() as MutationId, at: context.now() };
 }
 
@@ -34,7 +35,7 @@ export function createList(
 ): MutationOf<"createList"> {
   const keys = visibleLists(state).map((list) => list.order);
   return {
-    ...base(context),
+    ...mutationBase(context),
     type: "createList",
     listId: context.newId() as ListId,
     title,
@@ -47,7 +48,7 @@ export function renameList(
   listId: ListId,
   title: string,
 ): MutationOf<"renameList"> {
-  return { ...base(context), type: "renameList", listId, title };
+  return { ...mutationBase(context), type: "renameList", listId, title };
 }
 
 /** Moves a list to `toIndex` among the other visible lists. */
@@ -60,11 +61,11 @@ export function moveList(
   const keys = visibleLists(state)
     .filter((list) => list.id !== listId)
     .map((list) => list.order);
-  return { ...base(context), type: "moveList", listId, order: keyForIndex(keys, toIndex) };
+  return { ...mutationBase(context), type: "moveList", listId, order: keyForIndex(keys, toIndex) };
 }
 
 export function deleteList(context: CommandContext, listId: ListId): MutationOf<"deleteList"> {
-  return { ...base(context), type: "deleteList", listId };
+  return { ...mutationBase(context), type: "deleteList", listId };
 }
 
 /** Returns an ID for a task that the UI shows as a draft before it creates the task. */
@@ -86,7 +87,7 @@ export function createTask(
 ): MutationOf<"createTask"> {
   const keys = openTasks(state, listId).map((task) => task.order);
   return {
-    ...base(context),
+    ...mutationBase(context),
     type: "createTask",
     taskId,
     listId,
@@ -100,11 +101,11 @@ export function renameTask(
   taskId: TaskId,
   title: string,
 ): MutationOf<"renameTask"> {
-  return { ...base(context), type: "renameTask", taskId, title };
+  return { ...mutationBase(context), type: "renameTask", taskId, title };
 }
 
 export function completeTask(context: CommandContext, taskId: TaskId): MutationOf<"completeTask"> {
-  return { ...base(context), type: "completeTask", taskId };
+  return { ...mutationBase(context), type: "completeTask", taskId };
 }
 
 /** Uncompletes a task and puts it at the end of the open tasks. */
@@ -115,7 +116,7 @@ export function uncompleteTask(
 ): MutationOf<"uncompleteTask"> {
   const keys = openTasks(state, existingTask(state, taskId).listId).map((task) => task.order);
   return {
-    ...base(context),
+    ...mutationBase(context),
     type: "uncompleteTask",
     taskId,
     order: keyForIndex(keys, keys.length),
@@ -132,11 +133,11 @@ export function moveTask(
   const keys = openTasks(state, existingTask(state, taskId).listId)
     .filter((task) => task.id !== taskId)
     .map((task) => task.order);
-  return { ...base(context), type: "moveTask", taskId, order: keyForIndex(keys, toIndex) };
+  return { ...mutationBase(context), type: "moveTask", taskId, order: keyForIndex(keys, toIndex) };
 }
 
 export function deleteTask(context: CommandContext, taskId: TaskId): MutationOf<"deleteTask"> {
-  return { ...base(context), type: "deleteTask", taskId };
+  return { ...mutationBase(context), type: "deleteTask", taskId };
 }
 
 /** Deletes the completed tasks that the list shows now. */
@@ -146,5 +147,5 @@ export function clearCompleted(
   listId: ListId,
 ): MutationOf<"clearCompleted"> {
   const taskIds = completedTasks(state, listId).map((task) => task.id);
-  return { ...base(context), type: "clearCompleted", listId, taskIds };
+  return { ...mutationBase(context), type: "clearCompleted", listId, taskIds };
 }

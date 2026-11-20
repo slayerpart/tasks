@@ -4,8 +4,9 @@ import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import type { Sound } from "../../feedback/feedback.ts";
 import * as commands from "../../model/commands.ts";
+import { referencedIds, type Mutation } from "../../model/mutations.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
-import type { TaskId, TaskList } from "../../model/types.ts";
+import type { MutationId, TaskId, TaskList } from "../../model/types.ts";
 import { DraftRow } from "./DraftRow.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
@@ -13,6 +14,7 @@ import { Hints } from "./Hints.tsx";
 import styles from "./TaskListScreen.module.css";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
 import type { CommitReason } from "./TitleInput.tsx";
+import { UndoToast, type Toast } from "./UndoToast.tsx";
 import { previewOrder } from "./reorder.ts";
 import { useHoverInsert } from "./use-hover-insert.ts";
 import { usePinchInsert } from "./use-pinch-insert.ts";
@@ -20,6 +22,18 @@ import { usePull } from "./use-pull.ts";
 import { useReorder } from "./use-reorder.ts";
 
 const context = commands.browserCommandContext;
+
+/** The sound for the change that an undo makes. Other undos give only a haptic tap. */
+const undoSounds = {
+  restoreTasks: "add",
+  deleteTask: "delete",
+  completeTask: "complete",
+  uncompleteTask: "uncomplete",
+} as const satisfies Partial<Record<Mutation["type"], Sound>>;
+
+function undoSound(type: Mutation["type"]): Sound | undefined {
+  return type in undoSounds ? undoSounds[type as keyof typeof undoSounds] : undefined;
+}
 
 interface Draft {
   readonly id: TaskId;
@@ -63,6 +77,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editingId, setEditingId] = useState<TaskId | null>(null);
   const [activeId, setActiveId] = useState<TaskId | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   /** Focus to move after the next render. Every request comes with a state change that renders. */
   const focusRequest = useRef<FocusRequest | null>(null);
   /** True when a task was open for its title as the current press began. */
@@ -116,6 +131,15 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       if (plainKey && event.key.toLowerCase() === "n" && !isTyping(event.target)) {
         event.preventDefault();
         startDraft(0);
+      } else if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "z" &&
+        !isTyping(event.target)
+      ) {
+        event.preventDefault();
+        undo();
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -193,12 +217,39 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   }
 
   function remove(item: DisplayTask, index: number): void {
-    const neighbor = items[index + 1] ?? items[index - 1];
-    store.dispatch(commands.deleteTask(context, item.task.id));
+    const deletion = commands.deleteTask(context, item.task.id);
+    store.dispatch(deletion);
     signal("delete");
+    setToast({ mutationId: deletion.mutationId, message: `Deleted “${item.task.title}”` });
+    focusNeighbor(index);
+  }
+
+  /** Moves the focus away from the row at `index`, which is about to leave. */
+  function focusNeighbor(index: number): void {
+    const neighbor = items[index + 1] ?? items[index - 1];
     if (neighbor !== undefined) {
       setActiveId(neighbor.task.id);
       requestFocus({ taskId: neighbor.task.id, control: "title" });
+    }
+  }
+
+  /** Undoes the change with this ID, or else the newest change. */
+  function undo(mutationId?: MutationId): void {
+    const undone = store.undo(mutationId);
+    if (undone === null) return;
+    if (toast?.mutationId === undone.mutationId) setToast(null);
+    const sound = undoSound(undone.inverse.type);
+    if (sound === undefined) feedback.haptics.tap();
+    else signal(sound);
+
+    const [taskId] = referencedIds(undone.inverse).taskIds;
+    if (taskId === undefined) return;
+    if (undone.inverse.type === "deleteTask") {
+      // The undo removes a task that the user added.
+      focusNeighbor(items.findIndex((item) => item.task.id === taskId));
+    } else {
+      setActiveId(taskId);
+      requestFocus({ taskId, control: "title" });
     }
   }
 
@@ -410,6 +461,15 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       )}
       {/* Outside the moving list: its perspective would make the fixed position relative to it. */}
       {inputMode === "touch" && hints}
+      <UndoToast
+        toast={toast}
+        onUndo={(shown) => {
+          undo(shown.mutationId);
+        }}
+        onClose={() => {
+          setToast(null);
+        }}
+      />
     </section>
   );
 }

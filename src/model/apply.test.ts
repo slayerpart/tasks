@@ -141,6 +141,37 @@ describe("applyMutation", () => {
     expect(changedAfterDelete).toBe(deleted);
   });
 
+  it("restores deleted tasks and leaves other tasks alone", () => {
+    const secondId = "task-2" as TaskId;
+    const at = "2026-11-16T12:00:00.000Z";
+    const deleted = applyAll(withTask, [
+      mutation({
+        type: "createTask",
+        taskId: secondId,
+        listId,
+        title: "Bread",
+        order: "a1" as OrderKey,
+      }),
+      mutation({ type: "deleteTask", taskId }, "2026-11-16T11:00:00.000Z"),
+    ]);
+
+    const restored = applyMutation(
+      deleted,
+      mutation({ type: "restoreTasks", taskIds: [taskId, secondId] }, at),
+    );
+
+    expect(restored.tasks.get(taskId)).toEqual({ ...withTask.tasks.get(taskId), updatedAt: at });
+    expect(restored.tasks.get(secondId)).toBe(deleted.tasks.get(secondId));
+  });
+
+  it("completes a task at a given time", () => {
+    const completedAt = "2026-11-15T09:00:00.000Z";
+
+    const state = applyMutation(withTask, mutation({ type: "completeTask", taskId, completedAt }));
+
+    expect(state.tasks.get(taskId)?.completedAt).toBe(completedAt);
+  });
+
   it("ignores changes to rows that do not exist", () => {
     const state = applyMutation(
       withTask,

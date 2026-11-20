@@ -30,10 +30,17 @@ export type Mutation = MutationBase &
         readonly order: OrderKey;
       }
     | { readonly type: "renameTask"; readonly taskId: TaskId; readonly title: string }
-    | { readonly type: "completeTask"; readonly taskId: TaskId }
+    | {
+        readonly type: "completeTask";
+        readonly taskId: TaskId;
+        /** The completion time. Undo gives the old time, so the task gets its old place back. */
+        readonly completedAt?: IsoTimestamp;
+      }
     | { readonly type: "uncompleteTask"; readonly taskId: TaskId; readonly order: OrderKey }
     | { readonly type: "moveTask"; readonly taskId: TaskId; readonly order: OrderKey }
     | { readonly type: "deleteTask"; readonly taskId: TaskId }
+    /** Brings back deleted tasks. Undo uses it after a delete or a clear. */
+    | { readonly type: "restoreTasks"; readonly taskIds: readonly TaskId[] }
     | {
         readonly type: "clearCompleted";
         readonly listId: ListId;
@@ -62,6 +69,7 @@ export function referencedIds(mutation: Mutation): {
     case "deleteTask":
       return { listIds: [], taskIds: [mutation.taskId] };
     case "clearCompleted":
+    case "restoreTasks":
       return { listIds: [], taskIds: mutation.taskIds };
   }
 }

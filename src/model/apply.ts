@@ -10,6 +10,7 @@ type TaskPatch = Partial<Pick<Task, "title" | "order" | "completedAt" | "deleted
  *
  * A create for an existing ID and a change to a missing or deleted row have no effect.
  * This makes a repeated mutation harmless, and a delete wins over later changes.
+ * Only a restore brings a deleted task back.
  */
 export function applyMutation(state: State, mutation: Mutation): State {
   const { at } = mutation;
@@ -47,7 +48,7 @@ export function applyMutation(state: State, mutation: Mutation): State {
     case "completeTask": {
       const task = state.tasks.get(mutation.taskId);
       if (task !== undefined && task.completedAt !== null) return state;
-      return updateTask(state, mutation.taskId, at, { completedAt: at });
+      return updateTask(state, mutation.taskId, at, { completedAt: mutation.completedAt ?? at });
     }
     case "uncompleteTask":
       return updateTask(state, mutation.taskId, at, { completedAt: null, order: mutation.order });
@@ -60,6 +61,12 @@ export function applyMutation(state: State, mutation: Mutation): State {
         (next, taskId) => updateTask(next, taskId, at, { deletedAt: at }),
         state,
       );
+    case "restoreTasks":
+      return mutation.taskIds.reduce((next, taskId) => {
+        const task = next.tasks.get(taskId);
+        if (task === undefined || task.deletedAt === null) return next;
+        return putTask(next, { ...task, deletedAt: null, updatedAt: at });
+      }, state);
   }
 }
 

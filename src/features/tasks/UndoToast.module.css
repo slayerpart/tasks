@@ -1,0 +1,64 @@
+/* The toast floats above the list, at the bottom of the screen. */
+.region {
+  position: fixed;
+  z-index: 2;
+  inset-inline: 0;
+  inset-block-end: calc(1rem + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  padding-inline: 1rem;
+  pointer-events: none;
+}
+
+.toast {
+  /* A leaving message is placed absolutely in the card while the new one comes in. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* One width for all messages, so a new message does not change the size of the card. */
+  inline-size: min(100%, 24rem);
+  padding: 0.25rem 0.25rem 0.25rem 1.25rem;
+  /* The card clips the messages as they slide in and out. */
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--color-text);
+  color: var(--color-surface);
+  box-shadow: 0 0.5rem 1.5rem oklch(0% 0 0 / 0.25);
+  font-size: 1rem;
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+.message {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.undo {
+  flex: none;
+  min-block-size: 2.75rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .undo:hover {
+    background: color-mix(in oklch, currentColor 14%, transparent);
+  }
+}
+
+/* The default focus color has too little contrast on the dark toast. */
+.undo:focus-visible {
+  outline-color: currentColor;
+  outline-offset: -4px;
+}

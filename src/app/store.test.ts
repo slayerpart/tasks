@@ -78,3 +78,61 @@ describe("openAppStore", () => {
     expect(store.getSnapshot().saveFailed).toBe(false);
   });
 });
+
+describe("undo", () => {
+  async function storeWithTasks(titles: readonly string[]) {
+    const local = createMemoryLocalStore();
+    const store = await openAppStore(local);
+    const listId = visibleLists(store.getSnapshot().state)[0]?.id;
+    if (listId === undefined) throw new Error("Setup failed.");
+    titles.forEach((title, index) => {
+      store.dispatch(commands.createTask(store.getSnapshot().state, context, listId, index, title));
+    });
+    const titlesNow = () => openTasks(store.getSnapshot().state, listId).map((task) => task.title);
+    const task = (title: string) => {
+      const found = openTasks(store.getSnapshot().state, listId).find((t) => t.title === title);
+      if (found === undefined) throw new Error(`${title} is not open.`);
+      return found;
+    };
+    return { local, store, listId, titlesNow, task };
+  }
+
+  it("undoes the changes one by one, newest first, and saves the undo", async () => {
+    const { local, store, listId, titlesNow, task } = await storeWithTasks(["Milk", "Bread"]);
+    store.dispatch(commands.deleteTask(context, task("Milk").id));
+    store.dispatch(commands.renameTask(context, task("Bread").id, "Rye bread"));
+
+    expect(store.undo()?.inverse.type).toBe("renameTask");
+    expect(titlesNow()).toEqual(["Bread"]);
+    expect(store.undo()?.inverse.type).toBe("restoreTasks");
+    expect(titlesNow()).toEqual(["Milk", "Bread"]);
+    await store.idle();
+    expect(openTasks(await local.load(), listId).map((t) => t.title)).toEqual(["Milk", "Bread"]);
+  });
+
+  it("undoes a given change, also when later changes exist", async () => {
+    const { store, titlesNow, task } = await storeWithTasks(["Milk", "Bread"]);
+    const deletion = commands.deleteTask(context, task("Milk").id);
+    store.dispatch(deletion);
+    store.dispatch(commands.renameTask(context, task("Bread").id, "Rye bread"));
+
+    expect(store.undo(deletion.mutationId)?.mutationId).toBe(deletion.mutationId);
+    expect(titlesNow()).toEqual(["Milk", "Rye bread"]);
+    expect(store.undo()?.inverse.type).toBe("renameTask");
+  });
+
+  it("does not undo the same change twice", async () => {
+    const { store, task } = await storeWithTasks(["Milk"]);
+    const deletion = commands.deleteTask(context, task("Milk").id);
+    store.dispatch(deletion);
+
+    expect(store.undo(deletion.mutationId)).not.toBeNull();
+    expect(store.undo(deletion.mutationId)).toBeNull();
+  });
+
+  it("has nothing to undo at the start", async () => {
+    const store = await openAppStore(createMemoryLocalStore());
+
+    expect(store.undo()).toBeNull();
+  });
+});
