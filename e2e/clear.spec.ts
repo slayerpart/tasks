@@ -41,7 +41,9 @@ test.describe("on a phone", () => {
     await pull(page.getByRole("button", { name: "Edit Bread" }), -140);
 
     await expectTitles(page, ["Bread"]);
-    await expect(page.getByRole("status")).toContainText("Cleared 2 completed tasks");
+    await expect(
+      page.getByRole("status").filter({ has: page.getByRole("button", { name: "Undo" }) }),
+    ).toContainText("Cleared 2 completed tasks");
 
     await page.getByRole("button", { name: "Undo" }).click();
     await expectTitles(page, ["Bread", "Eggs", "Milk"]);
@@ -103,7 +105,9 @@ test.describe("with a mouse and a keyboard", () => {
 
     await expectTitles(page, ["Bread"]);
     await expect(page.getByRole("button", { name: "List actions" })).toBeFocused();
-    await expect(page.getByRole("status")).toContainText("Cleared 2 completed tasks");
+    await expect(
+      page.getByRole("status").filter({ has: page.getByRole("button", { name: "Undo" }) }),
+    ).toContainText("Cleared 2 completed tasks");
   });
 
   test("Shift+Backspace clears the completed tasks", async ({ page }) => {

@@ -76,6 +76,57 @@ describe("App", () => {
     expect(titles()).toEqual(["Tea", "Milk"]);
   });
 
+  it("adds a task with N at the start, because the task screen has the focus", async () => {
+    const { user } = await renderApp();
+
+    await user.keyboard("n");
+
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "New task" }));
+  });
+
+  it("ignores N while the focus is outside the task screen", async () => {
+    const { user } = await renderApp();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+
+    await user.keyboard("n");
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("gives the focus back to the active task when Escape closes a new task", async () => {
+    const { user } = await renderApp();
+    await user.keyboard("n");
+    await user.keyboard("Milk{Enter}");
+
+    await user.keyboard("{Escape}");
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Milk" }));
+  });
+
+  it.each([["{Escape}"], ["{Enter}"]])(
+    "keeps the focus in the screen when %s closes an empty new task in an empty list",
+    async (key) => {
+      const { user } = await renderApp();
+      await user.keyboard("n");
+
+      await user.keyboard(key);
+      await user.keyboard("n");
+
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "New task" }));
+    },
+  );
+
+  it("keeps the focus in the screen after the last task is deleted, so N still works", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk"]);
+    screen.getByRole("button", { name: "Edit Milk" }).focus();
+
+    await user.keyboard("{Delete}");
+    await user.keyboard("n");
+
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "New task" }));
+  });
+
   it("does not create a task from an empty draft", async () => {
     const { user } = await renderApp();
 
@@ -122,6 +173,8 @@ describe("App", () => {
     await user.keyboard("{ArrowUp}");
     expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: "Milk" }));
 
+    // The title, the actions menu and the delete button of the row, and then out of the list.
+    await user.tab();
     await user.tab();
     await user.tab();
     await user.tab();
@@ -268,6 +321,17 @@ describe("undo", () => {
     await waitFor(() => {
       expect(toast()).toBeNull();
     });
+  });
+
+  it("shows the undo shortcut on the Undo button, which keeps its name", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk"]);
+
+    await user.click(screen.getByRole("button", { name: "Delete Milk" }));
+
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(undo.getAttribute("aria-keyshortcuts")).toBe("Control+Z");
+    expect(undo.textContent).toBe("UndoCtrl+Z");
   });
 
   it.each([
@@ -425,5 +489,143 @@ describe("clear completed", () => {
     expect(
       screen.getByRole("menuitem", { name: "Clear completed" }).getAttribute("aria-disabled"),
     ).toBe("true");
+  });
+});
+
+describe("row actions menu", () => {
+  const actions = (title: string) => screen.getByRole("button", { name: `Actions for ${title}` });
+  const items = () =>
+    within(screen.getByRole("menu"))
+      .getAllByRole("menuitem")
+      .map((item) => ({
+        label: item.textContent,
+        disabled: item.getAttribute("aria-disabled") === "true",
+      }));
+
+  it("lists the actions of an open task, and disables the moves that are not possible", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(actions("Milk"));
+
+    expect(items()).toEqual([
+      { label: "Complete", disabled: false },
+      { label: "Edit", disabled: false },
+      { label: "Move up", disabled: true },
+      { label: "Move down", disabled: false },
+      { label: "Delete", disabled: false },
+    ]);
+  });
+
+  it("moves a task down, and keeps the focus on its menu button", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(actions("Milk"));
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+
+    expect(titles()).toEqual(["Bread", "Milk"]);
+    expect(document.activeElement).toBe(actions("Milk"));
+  });
+
+  it("completes a task, which then has no moves in its menu", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(actions("Milk"));
+    await user.click(screen.getByRole("menuitem", { name: "Complete" }));
+
+    expect(tasks()).toEqual([
+      { title: "Bread", done: false },
+      { title: "Milk", done: true },
+    ]);
+    expect(document.activeElement).toBe(actions("Milk"));
+    await user.keyboard("{Enter}");
+    expect(items().map((item) => item.label)).toEqual(["Uncomplete", "Edit", "Delete"]);
+  });
+
+  it("opens the title for editing", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk"]);
+
+    await user.click(actions("Milk"));
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+
+    const field = screen.getByRole("textbox", { name: "Task title" });
+    expect(document.activeElement).toBe(field);
+    expect((field as HTMLInputElement).value).toBe("Milk");
+  });
+
+  it("deletes a task with an undo toast, and focuses the next task", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(actions("Milk"));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(titles()).toEqual(["Bread"]);
+    });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Bread" }));
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+  });
+
+  it("keeps the arrow keys in the open menu, away from the rows", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    await user.click(actions("Milk"));
+
+    await user.keyboard("{ArrowDown}");
+
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Edit" }));
+  });
+
+  it("moves between rows with the arrow keys on the menu button, like on the other controls", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    actions("Milk").focus();
+
+    await user.keyboard("{ArrowDown}");
+
+    expect(document.activeElement).toBe(actions("Bread"));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("moves a task with Alt and the arrow keys on the menu button", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    actions("Milk").focus();
+
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+
+    expect(titles()).toEqual(["Bread", "Milk"]);
+    expect(document.activeElement).toBe(actions("Milk"));
+  });
+
+  it("undoes with Cmd+Z while the menu is open", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+    await user.click(screen.getByRole("checkbox", { name: "Milk" }));
+    await user.click(actions("Bread"));
+
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    expect(tasks()).toEqual([
+      { title: "Milk", done: false },
+      { title: "Bread", done: false },
+    ]);
+  });
+
+  it.each([
+    ["Complete", "Milk is done"],
+    ["Move down", "Milk moved to place 2 of 2"],
+  ])("announces the result of %s", async (action, message) => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(actions("Milk"));
+    await user.click(screen.getByRole("menuitem", { name: action }));
+
+    expect(screen.getByText(message).closest('[role="status"]')).not.toBeNull();
   });
 });

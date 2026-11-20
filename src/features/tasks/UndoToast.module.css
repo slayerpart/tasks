@@ -51,6 +51,13 @@
   cursor: pointer;
 }
 
+.shortcut {
+  margin-inline-start: 0.5rem;
+  color: color-mix(in oklch, currentColor 70%, transparent);
+  font: inherit;
+  font-weight: 600;
+}
+
 @media (hover: hover) {
   .undo:hover {
     background: color-mix(in oklch, currentColor 14%, transparent);

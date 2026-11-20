@@ -4,6 +4,8 @@ import { afterEach } from "vitest";
 
 // jsdom has no layout, so animations would only slow tests down. E2E tests cover real motion.
 MotionGlobalConfig.skipAnimations = true;
+// Without layout, jsdom has no scrolling either.
+Element.prototype.scrollIntoView = () => undefined;
 
 afterEach(() => {
   cleanup();

@@ -164,8 +164,9 @@ test("a new toast replaces the old one in place, without a jump", async ({ page,
     expect(frame.count).toBe(1);
     expect(Math.abs(frame.center - viewportCenter)).toBeLessThan(1);
   }
+  // Only the new message is left. The Undo button can show a shortcut after it.
   await expect(page.getByRole("status").filter({ has: undoButton(page) })).toHaveText(
-    "Deleted “Bread”Undo",
+    /^Deleted “Bread”Undo/,
   );
 });
 
@@ -183,3 +184,42 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(results.violations).toEqual([]);
   });
 }
+
+test("the Undo button shows the undo shortcut only on devices with a keyboard", async ({
+  page,
+  hasTouch,
+}) => {
+  await deleteTask(page, hasTouch, "Bread");
+
+  await expect(undoButton(page)).toHaveText(hasTouch ? "Undo" : /^Undo(⌘Z|Ctrl\+Z)$/);
+});
+
+test("the toast never covers the focused task", async ({ page, hasTouch }) => {
+  test.skip(hasTouch, "Phones have no arrow keys.");
+  await addTasks(
+    page,
+    Array.from({ length: 20 }, (_, index) => `Task ${String(index + 1)}`),
+  );
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
+  await page.getByRole("button", { name: "Edit Milk" }).focus();
+  await page.keyboard.press("Delete");
+  await expect(undoButton(page)).toBeVisible();
+
+  for (let step = 0; step < 14; step++) {
+    await page.keyboard.press("ArrowDown");
+    // The rows and the toast move for a short time. The final place counts.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const row = document.activeElement?.closest("li")?.getBoundingClientRect();
+            const toast = document.querySelector("[data-toast]")?.getBoundingClientRect();
+            return row !== undefined && toast !== undefined && row.bottom > toast.top;
+          }),
+        { message: `step ${String(step)}`, timeout: 2000 },
+      )
+      .toBe(false);
+  }
+});

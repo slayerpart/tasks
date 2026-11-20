@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import { useEffect, useEffectEvent, useState } from "react";
 import type { MutationId } from "../../model/types.ts";
 import { rowSpring } from "../../ui/motion.ts";
+import { undoShortcut } from "../../ui/shortcuts.ts";
 import styles from "./UndoToast.module.css";
 
 export interface Toast {
@@ -16,19 +17,27 @@ interface UndoToastProps {
   readonly toast: Toast | null;
   readonly onUndo: (toast: Toast) => void;
   readonly onClose: () => void;
+  /** True to show the keyboard shortcut on the Undo button. Touch screens have no keyboard. */
+  readonly showShortcut: boolean;
 }
 
 /**
  * Tells the user about a change that they can undo. The live region is always in the page,
  * so screen readers announce each new message.
  */
-export function UndoToast({ toast, onUndo, onClose }: UndoToastProps) {
+export function UndoToast({ toast, onUndo, onClose, showShortcut }: UndoToastProps) {
   return (
     <div className={styles["region"]} role="status">
       <AnimatePresence>
         {/* One card for all messages. A new message replaces the text in the card. */}
         {toast !== null && (
-          <ToastCard key="toast" toast={toast} onUndo={onUndo} onClose={onClose} />
+          <ToastCard
+            key="toast"
+            toast={toast}
+            onUndo={onUndo}
+            onClose={onClose}
+            showShortcut={showShortcut}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -39,10 +48,12 @@ function ToastCard({
   toast,
   onUndo,
   onClose,
+  showShortcut,
 }: {
   readonly toast: Toast;
   readonly onUndo: (toast: Toast) => void;
   readonly onClose: () => void;
+  readonly showShortcut: boolean;
 }) {
   const present = useIsPresent();
   const [hovered, setHovered] = useState(false);
@@ -100,11 +111,18 @@ function ToastCard({
       <button
         type="button"
         className={styles["undo"]}
+        aria-keyshortcuts={undoShortcut.keys}
         onClick={() => {
           onUndo(toast);
         }}
       >
         Undo
+        {showShortcut && (
+          // The name of the button stays "Undo". `aria-keyshortcuts` tells about the shortcut.
+          <kbd className={styles["shortcut"]} aria-hidden="true">
+            {undoShortcut.label}
+          </kbd>
+        )}
       </button>
     </motion.div>
   );

@@ -1,5 +1,15 @@
 import { AnimatePresence, motion, useIsPresent } from "motion/react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
 import styles from "./Menu.module.css";
 
 export interface MenuItem {
@@ -11,23 +21,53 @@ export interface MenuItem {
   readonly keyShortcuts?: string;
 }
 
+/** Attributes for the button that opens the menu, for example to put it in a roving tab order. */
+interface ButtonAttributes {
+  readonly className?: string | undefined;
+  readonly tabIndex?: number;
+  readonly "data-control"?: string;
+}
+
 interface MenuProps {
   /** The accessible name of the button that opens the menu. */
   readonly label: string;
   readonly icon: ReactNode;
   readonly items: readonly MenuItem[];
-  readonly className?: string;
+  readonly button?: ButtonAttributes;
+  /**
+   * False when the arrow keys on the button must do something else, for example move between
+   * rows. Enter and Space still open the menu.
+   */
+  readonly arrowKeysOpen?: boolean;
 }
 
 /** The item that gets the focus when the menu opens. */
 type OpenFocus = "first" | "last";
 
-/** A menu button. The keyboard works as in the WAI-ARIA menu button pattern. */
-export function Menu({ label, icon, items, className }: MenuProps) {
+/** Space between the button and the menu, and between the menu and the viewport edge, in px. */
+const gap = 4;
+
+/**
+ * A menu button. The keyboard works as in the WAI-ARIA menu button pattern.
+ * The menu renders at the end of the page, so a container that clips its content, such as a
+ * task row, cannot cut it off.
+ */
+export function Menu({ label, icon, items, button, arrowKeysOpen = true }: MenuProps) {
   const [open, setOpen] = useState<OpenFocus | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+  /** A new menu for each open. A menu that opens during its exit animation focuses again. */
+  const [openCount, setOpenCount] = useState(0);
+  /** Where the menu renders. It stays after a close, for the exit animation. */
+  const [container, setContainer] = useState<Element | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+
+  function show(focus: OpenFocus): void {
+    // In the main landmark, so that all content is in a landmark.
+    setContainer(buttonRef.current?.closest("main") ?? document.body);
+    setOpen(focus);
+    setOpenCount((count) => count + 1);
+  }
 
   function close(returnFocus: boolean): void {
     setOpen(null);
@@ -39,54 +79,73 @@ export function Menu({ label, icon, items, className }: MenuProps) {
   // also closes the menu.
   useEffect(() => {
     if (open === null) return;
-    const outside = (event: Event) =>
-      !(event.target instanceof Node && rootRef.current?.contains(event.target) === true);
-    function onPointerDown(event: PointerEvent): void {
+    function outside(event: Event): boolean {
+      const target = event.target;
+      if (!(target instanceof Node)) return true;
+      return ![buttonRef.current, menuRef.current].some((element) => element?.contains(target));
+    }
+    function onOutside(event: Event): void {
       if (outside(event)) setOpen(null);
     }
-    function onFocusIn(event: FocusEvent): void {
-      if (outside(event)) setOpen(null);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("pointerdown", onOutside);
+    document.addEventListener("focusin", onOutside);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("pointerdown", onOutside);
+      document.removeEventListener("focusin", onOutside);
     };
   }, [open]);
 
   function onButtonKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    const modified = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
+    if (arrowKeysOpen && !modified && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
-      setOpen(event.key === "ArrowDown" ? "first" : "last");
+      show(event.key === "ArrowDown" ? "first" : "last");
     }
   }
 
   return (
-    <div ref={rootRef} className={[styles["root"], className].join(" ")}>
+    <>
       <button
+        {...button}
         ref={buttonRef}
         type="button"
-        className={styles["button"]}
+        className={[styles["button"], button?.className].join(" ")}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open !== null}
         aria-controls={open === null ? undefined : menuId}
         onClick={() => {
-          if (open === null) setOpen("first");
+          if (open === null) show("first");
           else close(false);
         }}
         onKeyDown={onButtonKeyDown}
       >
         {icon}
       </button>
-      <AnimatePresence>
-        {open !== null && (
-          <MenuList id={menuId} label={label} items={items} initialFocus={open} onClose={close} />
+      {container !== null &&
+        createPortal(
+          <AnimatePresence>
+            {open !== null && (
+              <MenuList
+                key={openCount}
+                id={menuId}
+                label={label}
+                items={items}
+                initialFocus={open}
+                anchorRef={buttonRef}
+                menuRef={menuRef}
+                onClose={close}
+              />
+            )}
+          </AnimatePresence>,
+          container,
         )}
-      </AnimatePresence>
-    </div>
+    </>
   );
+}
+
+function menuItems(menu: HTMLElement | null): HTMLElement[] {
+  return Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
 }
 
 interface MenuListProps {
@@ -94,25 +153,50 @@ interface MenuListProps {
   readonly label: string;
   readonly items: readonly MenuItem[];
   readonly initialFocus: OpenFocus;
+  readonly anchorRef: RefObject<HTMLElement | null>;
+  readonly menuRef: RefObject<HTMLDivElement | null>;
   readonly onClose: (returnFocus: boolean) => void;
 }
 
-function MenuList({ id, label, items, initialFocus, onClose }: MenuListProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
+function MenuList({ id, label, items, initialFocus, anchorRef, menuRef, onClose }: MenuListProps) {
   // A menu that leaves stays visible during its exit animation, but nobody can reach it.
   const present = useIsPresent();
 
-  function menuItems(): HTMLElement[] {
-    return Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
-  }
+  // The menu opens below the button, or above it when the space below is too small and the
+  // space above is larger. A menu that is higher than its space scrolls.
+  // It follows the button when the page scrolls.
+  useLayoutEffect(() => {
+    function place(): void {
+      const anchor = anchorRef.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (anchor === undefined || menu === null) return;
+      // The full height, also when a max height cuts it.
+      const height = menu.scrollHeight + menu.offsetHeight - menu.clientHeight;
+      const spaceBelow = window.innerHeight - anchor.bottom - 2 * gap;
+      const spaceAbove = anchor.top - 2 * gap;
+      const below = height <= spaceBelow || spaceBelow >= spaceAbove;
+      const space = below ? spaceBelow : spaceAbove;
+      menu.style.maxHeight = `${String(space)}px`;
+      menu.style.top = `${String(below ? anchor.bottom + gap : anchor.top - gap - Math.min(height, space))}px`;
+      menu.style.right = `${String(document.documentElement.clientWidth - anchor.right)}px`;
+      menu.style.transformOrigin = below ? "top right" : "bottom right";
+    }
+    place();
+    window.addEventListener("scroll", place, { passive: true });
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place);
+      window.removeEventListener("resize", place);
+    };
+  }, [anchorRef, menuRef]);
 
   useEffect(() => {
-    const all = menuItems();
+    const all = menuItems(menuRef.current);
     (initialFocus === "first" ? all[0] : all.at(-1))?.focus();
-  }, [initialFocus]);
+  }, [initialFocus, menuRef]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    const all = menuItems();
+    const all = menuItems(menuRef.current);
     const index = all.findIndex((item) => item === document.activeElement);
     const target = {
       ArrowDown: all[(index + 1) % all.length],
@@ -123,12 +207,11 @@ function MenuList({ id, label, items, initialFocus, onClose }: MenuListProps) {
     if (target !== undefined) {
       event.preventDefault();
       target.focus();
-    } else if (event.key === "Escape") {
+    } else if (event.key === "Escape" || event.key === "Tab") {
+      // The menu is at the end of the page, so Tab would leave the page. The focus goes back
+      // to the button, which is the place of the menu in the tab order.
       event.preventDefault();
       onClose(true);
-    } else if (event.key === "Tab") {
-      // The focus moves on to the next control after the menu.
-      onClose(false);
     }
   }
 
@@ -140,10 +223,14 @@ function MenuList({ id, label, items, initialFocus, onClose }: MenuListProps) {
       aria-label={label}
       className={styles["menu"]}
       inert={!present}
-      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.14, ease: "easeOut" } }}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1, transition: { duration: 0.14, ease: "easeOut" } }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.1, ease: "easeIn" } }}
       onKeyDown={onKeyDown}
+      // Presses in the menu must not start a gesture of the button's container.
+      onPointerDown={(event) => {
+        event.stopPropagation();
+      }}
     >
       {items.map((item) => (
         <button
@@ -154,7 +241,8 @@ function MenuList({ id, label, items, initialFocus, onClose }: MenuListProps) {
           className={styles["item"]}
           aria-disabled={item.disabled === true || undefined}
           aria-keyshortcuts={item.keyShortcuts}
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             if (item.disabled === true) return;
             onClose(true);
             item.onSelect();

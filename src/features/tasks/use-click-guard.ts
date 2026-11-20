@@ -19,7 +19,9 @@ export function useClickGuard(): ClickGuard {
       armed.current = false;
     },
     onClickCapture: (event) => {
-      if (!armed.current) return;
+      // A click in a menu that renders outside the element is not the end of its drag.
+      const inside = event.target instanceof Node && event.currentTarget.contains(event.target);
+      if (!armed.current || !inside) return;
       armed.current = false;
       event.preventDefault();
       event.stopPropagation();

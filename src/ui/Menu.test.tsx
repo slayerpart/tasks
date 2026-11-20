@@ -91,13 +91,14 @@ describe("Menu", () => {
     expect(openMenu()).not.toBeNull();
   });
 
-  it("closes when the focus moves on with Tab", async () => {
+  it("closes with Tab and gives the focus back to the button, its place in the tab order", async () => {
     const { user } = renderMenu();
     await user.click(button());
 
     await user.tab();
 
     expect(openMenu()).toBeNull();
+    expect(document.activeElement).toBe(button());
   });
 
   it("closes on a press outside, and leaves the focus to that press", async () => {
@@ -119,6 +120,16 @@ describe("Menu", () => {
     });
 
     expect(openMenu()).toBeNull();
+  });
+
+  it("focuses the first item when it opens again during its exit animation", async () => {
+    const { user } = renderMenu();
+    await user.click(button());
+    await user.keyboard("{Escape}");
+
+    await user.keyboard("{Enter}");
+
+    expect(document.activeElement).toBe(item("Copy"));
   });
 
   it("closes on a second click on the button", async () => {

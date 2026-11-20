@@ -64,6 +64,27 @@ test.describe("with a mouse", () => {
     await expect.poll(breadTop).toBeCloseTo(restingTop, 0);
   });
 
+  test("a rest on an open task menu over the line between two tasks opens no gap", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Actions for Milk" }).click();
+    const menu = await page.getByRole("menu").boundingBox();
+    const line = await lineBelow(page, "Bread");
+    const eggsTop = async () =>
+      (await page.getByRole("button", { name: "Edit Eggs" }).boundingBox())?.y ?? 0;
+    const restingTop = await eggsTop();
+    expect(menu).not.toBeNull();
+    if (menu === null) return;
+    // The menu covers the line, so the pointer is on the menu.
+    expect(line.y).toBeGreaterThan(menu.y);
+    expect(line.y).toBeLessThan(menu.y + menu.height);
+
+    await page.mouse.move(menu.x + menu.width / 2, line.y);
+    await page.waitForTimeout(400);
+
+    expect(await eggsTop()).toBe(restingTop);
+  });
+
   test("a quick pass over the line opens no gap", async ({ page }) => {
     const line = await lineBelow(page, "Milk");
     const restingTop = (await page.getByRole("button", { name: "Edit Bread" }).boundingBox())?.y;

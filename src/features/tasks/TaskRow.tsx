@@ -7,13 +7,15 @@ import {
 } from "motion/react";
 import { useRef, type KeyboardEvent } from "react";
 import type { DisplayTask } from "../../model/selectors.ts";
+import { Menu, type MenuItem } from "../../ui/Menu.tsx";
+import { MoreIcon } from "../../ui/MoreIcon.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import styles from "./TaskListScreen.module.css";
 import { TitleInput, type CommitReason } from "./TitleInput.tsx";
 import { useLongPress, type PointerStart } from "./use-long-press.ts";
 import { useSwipe } from "./use-swipe.ts";
 
-export type RowControl = "check" | "title" | "delete";
+export type RowControl = "check" | "title" | "menu" | "delete";
 
 interface TaskRowProps {
   readonly item: DisplayTask;
@@ -27,6 +29,8 @@ interface TaskRowProps {
   readonly onCommitEdit: (title: string, reason: CommitReason) => void;
   readonly onCancelEdit: () => void;
   readonly onDelete: () => void;
+  /** The actions menu. It gives every action of the row, also to touch screen readers. */
+  readonly actions: readonly MenuItem[];
   readonly onFocus: () => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => void;
   /** True when the user can drag this row to a new place now. */
@@ -49,6 +53,7 @@ export function TaskRow({
   onCommitEdit,
   onCancelEdit,
   onDelete,
+  actions,
   onFocus,
   onKeyDown,
   reorderable,
@@ -143,6 +148,14 @@ export function TaskRow({
             {task.title}
           </button>
         )}
+        <Menu
+          label={`Actions for ${task.title}`}
+          icon={<MoreIcon />}
+          items={actions}
+          // The arrow keys move between rows, as on the other controls of the row.
+          arrowKeysOpen={false}
+          button={{ className: styles["actions"], tabIndex, "data-control": "menu" }}
+        />
         <button
           type="button"
           className={styles["delete"]}

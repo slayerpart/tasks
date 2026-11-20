@@ -10,6 +10,8 @@
   -webkit-text-size-adjust: 100%;
   /* Content that moves past the side of the screen, such as a lifted row, must not scroll. */
   overflow-x: clip;
+  /* A focused row that scrolls into view stays above the undo toast at the bottom. */
+  scroll-padding-block-end: calc(5rem + env(safe-area-inset-bottom));
 }
 
 *,

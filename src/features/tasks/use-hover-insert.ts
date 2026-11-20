@@ -46,6 +46,8 @@ export function useHoverInsert(
       if (!enabled || list === null || event.pointerType !== "mouse" || event.buttons !== 0) {
         return;
       }
+      // React also passes up moves over a row menu, which renders outside the list.
+      if (!(event.target instanceof Node && list.contains(event.target))) return;
       const rows = openRowBoxes(list);
       if (gap !== null) {
         const above = rows[gap - 1];

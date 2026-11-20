@@ -5,9 +5,22 @@
   min-block-size: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 
+/* The screen takes the focus only as the scope of its shortcuts. It is not a control. */
+.screen:focus-visible {
+  outline: none;
+}
+
+/* The free space at the end is higher than the undo toast, so the toast never covers the last row. */
 .tapArea {
   flex: 1;
-  min-block-size: 4rem;
+  min-block-size: 5rem;
+}
+
+/* Without the touch tap area, the screen keeps the same free space at the end. */
+@media not ((hover: none) and (pointer: coarse)) {
+  .screen {
+    padding-block-end: 5rem;
+  }
 }
 
 .header {
@@ -360,6 +373,10 @@
   cursor: pointer;
 }
 
+.actions {
+  flex: none;
+}
+
 .row :focus-visible {
   outline: 2px solid var(--row-focus);
   outline-offset: -2px;
@@ -367,6 +384,7 @@
 }
 
 .row .check:focus-visible,
+.row .actions:focus-visible,
 .row .delete:focus-visible {
   outline-offset: 2px;
   border-radius: 50%;
@@ -396,14 +414,17 @@
 /* With a mouse, the row controls appear on hover or focus. */
 @media (hover: hover) {
   .checkBox:has(.check:not(:checked)),
+  .actions,
   .delete,
   .handle {
     opacity: 0;
     transition: opacity 150ms ease-out;
   }
 
-  .row:hover :is(.checkBox, .delete, .handle),
-  .row:focus-within :is(.checkBox, .delete, .handle),
+  .row:hover :is(.checkBox, .actions, .delete, .handle),
+  .row:focus-within :is(.checkBox, .actions, .delete, .handle),
+  /* The menu is outside the row, so the row loses the focus while the menu is open. */
+  .actions[aria-expanded="true"],
   .row[data-dragging] .handle {
     opacity: 1;
   }
@@ -460,6 +481,16 @@
   pointer-events: none;
 }
 
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .key {
   display: inline-block;
   min-inline-size: 1.5em;
@@ -482,7 +513,8 @@
     display: none;
   }
 
-  .row:not(:has([data-control]:focus-visible)) :is(.checkBox, .delete),
+  /* An open row menu keeps them, so its button does not move away from the menu. */
+  .row:not(:has([data-control]:focus-visible, [aria-expanded="true"])) :is(.checkBox, .delete),
   .checkPlaceholder {
     position: absolute;
     inline-size: 1px;
@@ -503,6 +535,7 @@
   .rowContent,
   .swipeIcon,
   .checkBox,
+  .actions,
   .delete,
   .handle {
     transition: none;

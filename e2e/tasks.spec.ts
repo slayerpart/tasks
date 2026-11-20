@@ -186,3 +186,19 @@ for (const colorScheme of ["light", "dark"] as const) {
     });
   });
 }
+
+test("N still adds a task after the last task is deleted with the keyboard", async ({
+  page,
+  hasTouch,
+}) => {
+  test.skip(hasTouch, "Phones have no keyboard shortcuts.");
+  await addTasks(page, ["Milk"]);
+  await page.getByRole("button", { name: "Edit Milk" }).focus();
+
+  await page.keyboard.press("Delete");
+  // The row is inert while it leaves, so the browser takes the focus away from it.
+  await expect(page.getByRole("button", { name: "Edit Milk" })).toHaveCount(0);
+  await page.keyboard.press("n");
+
+  await expect(page.getByRole("textbox", { name: "New task" })).toBeFocused();
+});

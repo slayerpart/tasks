@@ -8,7 +8,8 @@ import { referencedIds, type Mutation } from "../../model/mutations.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { MutationId, TaskId, TaskList } from "../../model/types.ts";
 import { DraftRow } from "./DraftRow.tsx";
-import { Menu } from "../../ui/Menu.tsx";
+import { Menu, type MenuItem } from "../../ui/Menu.tsx";
+import { MoreIcon } from "../../ui/MoreIcon.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
 import { Hints } from "./Hints.tsx";
@@ -50,10 +51,18 @@ interface FocusRequest {
 }
 
 function isRowControl(value: string | undefined): value is RowControl {
-  return value === "check" || value === "title" || value === "delete";
+  return value === "check" || value === "title" || value === "menu" || value === "delete";
 }
 
 /** True when the user types into a field, so single-key shortcuts must not act. */
+/**
+ * True for an event from a menu that renders outside the element in the page. React still
+ * passes the event up through the element, which must not act on it.
+ */
+function fromPortal(event: { readonly target: EventTarget; readonly currentTarget: Element }) {
+  return !(event.target instanceof Node && event.currentTarget.contains(event.target));
+}
+
 function isTyping(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -82,6 +91,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const [editingId, setEditingId] = useState<TaskId | null>(null);
   const [activeId, setActiveId] = useState<TaskId | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  /** A message for screen readers. A new ID makes them read the same text again. */
+  const [announcement, setAnnouncement] = useState<{ id: number; text: string } | null>(null);
   /** Focus to move after the next render. Every request comes with a state change that renders. */
   const focusRequest = useRef<FocusRequest | null>(null);
   /** True when a task was open for its title as the current press began. */
@@ -122,20 +133,23 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     const request = focusRequest.current;
     if (request === null) return;
     focusRequest.current = null;
-    listRef.current
-      ?.querySelector<HTMLElement>(
-        `[data-task-id="${request.taskId}"] [data-control="${request.control}"]`,
-      )
-      ?.focus();
+    const target = listRef.current?.querySelector<HTMLElement>(
+      `[data-task-id="${request.taskId}"] [data-control="${request.control}"]`,
+    );
+    // A focus scrolls only to a row outside the viewport. The scroll padding also keeps a
+    // row clear of the undo toast, and only `scrollIntoView` uses it.
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "nearest" });
   });
+
+  // At the start, the focus is in the screen, so its shortcuts work at once.
+  useEffect(() => {
+    if (document.activeElement === document.body) screenRef.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent): void {
-      const plainKey = !event.altKey && !event.ctrlKey && !event.metaKey;
-      if (plainKey && event.key.toLowerCase() === "n" && !isTyping(event.target)) {
-        event.preventDefault();
-        startDraft(0);
-      } else if (
+      if (
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
         !event.shiftKey &&
@@ -191,7 +205,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
     if (title === "") {
-      setDraft(null);
+      // After Enter, the focus must stay in the screen. A blur has moved it already.
+      if (reason === "enter") cancelDraft();
+      else setDraft(null);
       return;
     }
     fromDraft.current.add(current.id);
@@ -203,6 +219,13 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     } else {
       setDraft(null);
     }
+  }
+
+  /** Escape closes a new task. The focus goes back to the active task, or else to the screen. */
+  function cancelDraft(): void {
+    setDraft(null);
+    if (tabbableId === null) screenRef.current?.focus({ preventScroll: true });
+    else requestFocus({ taskId: tabbableId, control: "title" });
   }
 
   function commitEdit(item: DisplayTask, title: string, reason: CommitReason): void {
@@ -221,6 +244,16 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   function cancelEdit(item: DisplayTask): void {
     setEditingId(null);
     requestFocus({ taskId: item.task.id, control: "title" });
+  }
+
+  function announce(text: string): void {
+    setAnnouncement((current) => ({ id: (current?.id ?? 0) + 1, text }));
+  }
+
+  /** For the keyboard and the menu. A checkbox tells its new state itself. */
+  function toggleAndAnnounce(item: DisplayTask): void {
+    toggle(item);
+    announce(`${item.task.title} is ${item.kind === "open" ? "done" : "not done"}`);
   }
 
   function toggle(item: DisplayTask): void {
@@ -273,6 +306,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     if (neighbor !== undefined) {
       setActiveId(neighbor.task.id);
       requestFocus({ taskId: neighbor.task.id, control: "title" });
+    } else {
+      // The last task leaves. The focus stays in the screen, so its shortcuts still work.
+      screenRef.current?.focus({ preventScroll: true });
     }
   }
 
@@ -296,20 +332,83 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     }
   }
 
+  /** Moves an open task one place up or down, and keeps the focus on the same control. */
+  function move(item: DisplayTask, by: 1 | -1, control: RowControl): void {
+    if (item.kind !== "open") return;
+    const from = openTasks(state, list.id).findIndex((task) => task.id === item.task.id);
+    const to = from + by;
+    if (to < 0 || to >= openCount) return;
+    store.dispatch(commands.moveTask(state, context, item.task.id, to));
+    requestFocus({ taskId: item.task.id, control });
+    announce(`${item.task.title} moved to place ${String(to + 1)} of ${String(openCount)}`);
+  }
+
+  function edit(item: DisplayTask): void {
+    setDraft(null);
+    setEditingId(item.task.id);
+  }
+
+  /** The row actions menu. The keyboard and the gestures do the same. */
+  function rowActions(item: DisplayTask, index: number): readonly MenuItem[] {
+    const keepFocus = () => {
+      requestFocus({ taskId: item.task.id, control: "menu" });
+    };
+    return [
+      {
+        label: item.kind === "open" ? "Complete" : "Uncomplete",
+        onSelect: () => {
+          toggleAndAnnounce(item);
+          // The task moves to its new place. The focus goes with it.
+          keepFocus();
+        },
+        keyShortcuts: "X",
+      },
+      {
+        label: "Edit",
+        onSelect: () => {
+          edit(item);
+        },
+      },
+      // Only open tasks have an order that the user sets.
+      ...(item.kind === "open"
+        ? [
+            {
+              label: "Move up",
+              onSelect: () => {
+                move(item, -1, "menu");
+              },
+              disabled: index === 0,
+              keyShortcuts: "Alt+ArrowUp",
+            },
+            {
+              label: "Move down",
+              onSelect: () => {
+                move(item, 1, "menu");
+              },
+              disabled: index === openCount - 1,
+              keyShortcuts: "Alt+ArrowDown",
+            },
+          ]
+        : []),
+      {
+        label: "Delete",
+        onSelect: () => {
+          remove(item, index);
+        },
+        keyShortcuts: "Delete",
+      },
+    ];
+  }
+
   function onRowKeyDown(event: KeyboardEvent<HTMLLIElement>, item: DisplayTask, index: number) {
-    if (isTyping(event.target) || event.ctrlKey || event.metaKey) return;
+    if (fromPortal(event) || isTyping(event.target) || event.ctrlKey || event.metaKey) return;
     const control =
       event.target instanceof HTMLElement ? event.target.dataset["control"] : undefined;
     const focusedControl: RowControl = isRowControl(control) ? control : "title";
 
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.altKey) {
       event.preventDefault();
-      if (item.kind !== "open") return;
-      const from = openTasks(state, list.id).findIndex((task) => task.id === item.task.id);
-      const to = event.key === "ArrowDown" ? from + 1 : from - 1;
-      if (to < 0 || to >= openCount) return;
-      store.dispatch(commands.moveTask(state, context, item.task.id, to));
-      requestFocus({ taskId: item.task.id, control: focusedControl });
+      move(item, event.key === "ArrowDown" ? 1 : -1, focusedControl);
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const neighbor = items[event.key === "ArrowDown" ? index + 1 : index - 1];
@@ -320,7 +419,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       return;
     } else if (event.key.toLowerCase() === "x") {
       event.preventDefault();
-      toggle(item);
+      toggleAndAnnounce(item);
     } else if ((event.key === "Delete" || event.key === "Backspace") && !event.shiftKey) {
       event.preventDefault();
       remove(item, index);
@@ -338,9 +437,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         toggle(item);
       }}
       onEdit={() => {
-        setDraft(null);
-        setEditingId(item.task.id);
+        edit(item);
       }}
+      actions={rowActions(item, index)}
       onCommitEdit={(title, reason) => {
         commitEdit(item, title, reason);
       }}
@@ -400,9 +499,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
               onCommit={(title, reason) => {
                 commitDraft(draft, title, reason);
               }}
-              onCancel={() => {
-                setDraft(null);
-              }}
+              onCancel={cancelDraft}
             />,
             ...taskRows.slice(draft.index),
           ];
@@ -412,7 +509,22 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       ref={screenRef}
       className={styles["screen"]}
       aria-labelledby={headingId}
+      // The screen takes the focus on a click on its free space, so N works there too.
+      tabIndex={-1}
       data-reordering={reorder.drag !== null || undefined}
+      onKeyDown={(event) => {
+        // A single-key shortcut works only while the focus is in the screen (WCAG 2.1.4).
+        const plainKey = !event.altKey && !event.ctrlKey && !event.metaKey;
+        if (
+          plainKey &&
+          event.key.toLowerCase() === "n" &&
+          !fromPortal(event) &&
+          !isTyping(event.target)
+        ) {
+          event.preventDefault();
+          startDraft(0);
+        }
+      }}
       onPointerDown={(event) => {
         reorder.onPointerDown();
         pull.onPointerDown(event);
@@ -448,13 +560,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           </button>
           <Menu
             label="List actions"
-            icon={
-              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
-                <circle cx="5.5" cy="12" r="1.75" fill="currentColor" />
-                <circle cx="12" cy="12" r="1.75" fill="currentColor" />
-                <circle cx="18.5" cy="12" r="1.75" fill="currentColor" />
-              </svg>
-            }
+            icon={<MoreIcon />}
             items={[
               {
                 label: "Clear completed",
@@ -535,6 +641,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       )}
       {/* Outside the moving list: its perspective would make the fixed position relative to it. */}
       {inputMode === "touch" && hints}
+      <p className={styles["visuallyHidden"]} role="status">
+        {announcement !== null && <span key={announcement.id}>{announcement.text}</span>}
+      </p>
       <UndoToast
         toast={toast}
         onUndo={(shown) => {
@@ -543,6 +652,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         onClose={() => {
           setToast(null);
         }}
+        showShortcut={inputMode === "pointer"}
       />
     </section>
   );
