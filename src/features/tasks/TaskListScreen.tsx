@@ -8,6 +8,7 @@ import { referencedIds, type Mutation } from "../../model/mutations.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { MutationId, TaskId, TaskList } from "../../model/types.ts";
 import { DraftRow } from "./DraftRow.tsx";
+import { Menu } from "../../ui/Menu.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
 import { Hints } from "./Hints.tsx";
@@ -68,10 +69,13 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   const { state } = useAppSnapshot();
   const storedItems = displayTasks(state, list.id);
   const openCount = storedItems.filter((item) => item.kind === "open").length;
+  const completedCount = storedItems.length - openCount;
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const screenRef = useRef<HTMLElement>(null);
   const pullPanelRef = useRef<HTMLDivElement>(null);
+  const clearPanelRef = useRef<HTMLDivElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
   const pullContentRef = useRef<HTMLDivElement>(null);
 
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -140,6 +144,16 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       ) {
         event.preventDefault();
         undo();
+      } else if (
+        event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key === "Backspace" &&
+        !isTyping(event.target)
+      ) {
+        event.preventDefault();
+        clearCompleted();
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -163,15 +177,17 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     setDraft({ id: commands.newTaskId(context), index, fromGesture });
   }
 
-  const pull = usePull(
-    screenRef,
-    pullPanelRef,
-    editingId === null,
-    reorder.drag !== null || pinch !== null,
-    () => {
+  const pull = usePull({
+    areaRef: screenRef,
+    addPanelRef: pullPanelRef,
+    clearPanelRef,
+    enabled: editingId === null,
+    paused: reorder.drag !== null || pinch !== null,
+    onAdd: () => {
       startDraft(0, true);
     },
-  );
+    onClear: completedCount > 0 && draft === null ? clearCompleted : null,
+  });
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
     if (title === "") {
@@ -222,6 +238,33 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     signal("delete");
     setToast({ mutationId: deletion.mutationId, message: `Deleted “${item.task.title}”` });
     focusNeighbor(index);
+  }
+
+  function clearCompleted(): void {
+    const clearing = commands.clearCompleted(state, context, list.id);
+    const count = clearing.taskIds.length;
+    if (count === 0) return;
+    const focusLeaves = clearing.taskIds.some(
+      (taskId) =>
+        listRef.current
+          ?.querySelector(`[data-task-id="${taskId}"]`)
+          ?.contains(document.activeElement) === true,
+    );
+    store.dispatch(clearing);
+    signal("delete");
+    setToast({
+      mutationId: clearing.mutationId,
+      message: `Cleared ${String(count)} completed ${count === 1 ? "task" : "tasks"}`,
+    });
+    if (!focusLeaves) return;
+    // The focus goes to the last open task, which is now at the end of the list.
+    const lastOpen = items[openCount - 1];
+    if (lastOpen === undefined) {
+      addButtonRef.current?.focus();
+    } else {
+      setActiveId(lastOpen.task.id);
+      requestFocus({ taskId: lastOpen.task.id, control: "title" });
+    }
   }
 
   /** Moves the focus away from the row at `index`, which is about to leave. */
@@ -278,7 +321,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     } else if (event.key.toLowerCase() === "x") {
       event.preventDefault();
       toggle(item);
-    } else if (event.key === "Delete" || event.key === "Backspace") {
+    } else if ((event.key === "Delete" || event.key === "Backspace") && !event.shiftKey) {
       event.preventDefault();
       remove(item, index);
     }
@@ -383,24 +426,45 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         <h1 id={headingId} className={styles["heading"]}>
           {list.title}
         </h1>
-        <button
-          type="button"
-          className={styles["add"]}
-          aria-label="Add task"
-          aria-keyshortcuts="N"
-          onClick={() => {
-            startDraft(0);
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
-            <path
-              d="M12 5v14M5 12h14"
-              stroke="currentColor"
-              strokeWidth="2.25"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        <div className={styles["headerActions"]}>
+          <button
+            ref={addButtonRef}
+            type="button"
+            className={styles["add"]}
+            aria-label="Add task"
+            aria-keyshortcuts="N"
+            onClick={() => {
+              startDraft(0);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+              <path
+                d="M12 5v14M5 12h14"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <Menu
+            label="List actions"
+            icon={
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+                <circle cx="5.5" cy="12" r="1.75" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+                <circle cx="18.5" cy="12" r="1.75" fill="currentColor" />
+              </svg>
+            }
+            items={[
+              {
+                label: "Clear completed",
+                onSelect: clearCompleted,
+                disabled: completedCount === 0,
+                keyShortcuts: "Shift+Backspace",
+              },
+            ]}
+          />
+        </div>
       </header>
       <div className={styles["pullArea"]}>
         <motion.div ref={pullContentRef} className={styles["pullContent"]} style={{ y: pull.y }}>
@@ -419,11 +483,11 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           <motion.div
             ref={pullPanelRef}
             className={styles["pullPanel"]}
-            data-armed={pull.armed}
-            style={{ rotateX: pull.panelTilt, opacity: pull.panelOpacity }}
+            data-armed={pull.armed === "add"}
+            style={{ rotateX: pull.panels.add.tilt, opacity: pull.panels.add.opacity }}
             aria-hidden="true"
           >
-            {pull.armed ? "Release to add" : "Pull to add a task"}
+            {pull.armed === "add" ? "Release to add" : "Pull to add a task"}
           </motion.div>
           <ul
             ref={listRef}
@@ -437,6 +501,16 @@ export function TaskListScreen({ list }: { list: TaskList }) {
               {rows}
             </AnimatePresence>
           </ul>
+          {/* Touch only. Everyone else has "Clear completed" in the list menu. */}
+          <motion.div
+            ref={clearPanelRef}
+            className={styles["clearPanel"]}
+            data-armed={pull.armed === "clear"}
+            style={{ rotateX: pull.panels.clear.tilt, opacity: pull.panels.clear.opacity }}
+            aria-hidden="true"
+          >
+            {pull.armed === "clear" ? "Release to clear" : "Pull to clear"}
+          </motion.div>
           {inputMode === "pointer" && hints}
         </motion.div>
       </div>

@@ -3,6 +3,19 @@ export const pullConfig = {
   resistance: 0.4,
 } as const satisfies Record<string, number>;
 
+/** A pull down adds a task. A pull up at the end of the list clears the completed tasks. */
+export type PullAction = "add" | "clear";
+
+/** The distance that arms each pull, in px. Null when the pull is not possible now. */
+export type PullThresholds = Readonly<Record<PullAction, number | null>>;
+
+export interface PullState {
+  /** How far the list moves. A negative offset moves it up. */
+  readonly offset: number;
+  /** The action that a release does now. */
+  readonly armed: PullAction | null;
+}
+
 /**
  * How far the list moves for a pull of `distance` px. It follows the finger up to the
  * threshold, and then moves slower, so the user feels the end of the pull.
@@ -16,4 +29,16 @@ export function pullOffset(distance: number, threshold: number): number {
 /** A release adds a task when the list has moved down by a full row. */
 export function pullArmed(offset: number, threshold: number): boolean {
   return threshold > 0 && offset >= threshold;
+}
+
+/** The state of a pull of `distance` px. A negative distance is a pull up. */
+export function pullState(distance: number, thresholds: PullThresholds): PullState {
+  const action: PullAction = distance >= 0 ? "add" : "clear";
+  const threshold = thresholds[action];
+  if (threshold === null) return { offset: 0, armed: null };
+  const offset = pullOffset(Math.abs(distance), threshold);
+  return {
+    offset: action === "add" ? offset : -offset,
+    armed: pullArmed(offset, threshold) ? action : null,
+  };
 }

@@ -25,6 +25,10 @@
   letter-spacing: -0.02em;
 }
 
+.headerActions {
+  display: flex;
+}
+
 .add {
   display: grid;
   place-items: center;
@@ -79,6 +83,28 @@
 }
 
 .pullPanel[data-armed="false"] {
+  color: oklch(100% 0 0 / 0.75);
+}
+
+/* The clear panel waits below the list, invisible, until a pull moves the list up. */
+.clearPanel {
+  position: absolute;
+  inset-inline: 0;
+  block-size: 4rem;
+  display: flex;
+  align-items: center;
+  padding-inline: 1.25rem;
+  background: var(--color-swipe-delete);
+  color: oklch(100% 0 0);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transform-origin: top;
+  /* Taps go through to the free space below the list. */
+  pointer-events: none;
+}
+
+.clearPanel[data-armed="false"] {
   color: oklch(100% 0 0 / 0.75);
 }
 

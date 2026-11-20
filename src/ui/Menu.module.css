@@ -1,0 +1,67 @@
+/* The menu floats above the list. */
+.root {
+  position: relative;
+  z-index: 3;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .button:hover {
+    background: color-mix(in oklch, currentColor 10%, transparent);
+  }
+}
+
+.menu {
+  position: absolute;
+  inset-block-start: calc(100% + 0.25rem);
+  inset-inline-end: 0;
+  display: grid;
+  min-inline-size: 13rem;
+  padding: 0.25rem;
+  border: 1px solid color-mix(in oklch, var(--color-text) 12%, transparent);
+  border-radius: 0.875rem;
+  background: var(--color-surface);
+  box-shadow: 0 0.5rem 1.5rem oklch(0% 0 0 / 0.2);
+  transform-origin: top right;
+}
+
+.item {
+  min-block-size: 2.75rem;
+  padding: 0 0.875rem;
+  border: 0;
+  border-radius: 0.625rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item[aria-disabled="true"] {
+  color: var(--color-completed-text);
+  cursor: default;
+}
+
+.item:not([aria-disabled="true"]):is(:hover, :focus) {
+  background: color-mix(in oklch, currentColor 10%, transparent);
+}
+
+/* The fill shows which item has the focus. The ring shows it again for the keyboard. */
+.item:focus-visible {
+  outline-offset: -2px;
+}

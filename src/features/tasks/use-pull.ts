@@ -17,20 +17,25 @@ import {
 import { flushSync } from "react-dom";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import { rowSpring } from "../../ui/motion.ts";
-import { pullArmed, pullOffset } from "./pull.ts";
+import { pullState, type PullAction } from "./pull.ts";
 import { useClickGuard } from "./use-click-guard.ts";
 
-interface Pull {
-  /** How far the list has moved down. */
-  readonly y: MotionValue<number>;
-  /** The tilt of the panel above the list, in degrees. It flattens as the list moves down. */
-  readonly panelTilt: MotionValue<number>;
+interface PanelMotion {
+  /** The tilt of the panel, in degrees. It flattens as the list moves. */
+  readonly tilt: MotionValue<number>;
   /**
    * The panel is invisible at rest. Safari does not always clip a 3D-transformed layer, so
-   * the clip above the list alone could let the tilted panel show.
+   * the clip above the list alone could let the tilted add panel show.
    */
-  readonly panelOpacity: MotionValue<number>;
-  readonly armed: boolean;
+  readonly opacity: MotionValue<number>;
+}
+
+interface Pull {
+  /** How far the list has moved. A negative value moves it up. */
+  readonly y: MotionValue<number>;
+  /** The add panel sits above the list. The clear panel sits below it. */
+  readonly panels: Readonly<Record<PullAction, PanelMotion>>;
+  readonly armed: PullAction | null;
   readonly onPointerDown: (event: PointerEvent) => void;
   /** Stops the click that a browser can send at the end of a pull. */
   readonly onClickCapture: (event: MouseEvent) => void;
@@ -40,25 +45,55 @@ function atTop(): boolean {
   return window.scrollY <= 0;
 }
 
-/**
- * Lets a touch or pen pull the list down at the top of the page. A release past the
- * height of the panel calls `onPull`, which must add the new row in place of the panel.
- */
-export function usePull(
-  areaRef: RefObject<HTMLElement | null>,
-  panelRef: RefObject<HTMLElement | null>,
-  enabled: boolean,
+function atBottom(): boolean {
+  return window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1;
+}
+
+interface PullOptions {
+  readonly areaRef: RefObject<HTMLElement | null>;
+  readonly addPanelRef: RefObject<HTMLElement | null>;
+  readonly clearPanelRef: RefObject<HTMLElement | null>;
+  readonly enabled: boolean;
   /** True while another gesture owns the pointer. A running pull then springs back. */
-  paused: boolean,
-  onPull: () => void,
-): Pull {
+  readonly paused: boolean;
+  /** Must add the new row in place of the add panel. */
+  readonly onAdd: () => void;
+  /** Null when the list has no completed tasks to clear. */
+  readonly onClear: (() => void) | null;
+}
+
+/**
+ * Lets a touch or pen pull the list down at the top of the page, or up at the end of the
+ * page. A release past the height of a panel calls its action.
+ */
+export function usePull({
+  areaRef,
+  addPanelRef,
+  clearPanelRef,
+  enabled,
+  paused,
+  onAdd,
+  onClear,
+}: PullOptions): Pull {
   const y = useMotionValue(0);
   const reducedMotion = useReducedMotion();
-  const panelTilt = useTransform(y, [0, 64], reducedMotion === true ? [0, 0] : [70, 0]);
-  const panelOpacity = useTransform(y, [0, 8], [0, 1]);
-  const [armed, setArmed] = useState(false);
+  const tilt = reducedMotion === true ? 0 : 70;
+  const panels = {
+    add: {
+      tilt: useTransform(y, [0, 64], [tilt, 0]),
+      opacity: useTransform(y, [0, 8], [0, 1]),
+    },
+    clear: {
+      tilt: useTransform(y, [-64, 0], [0, -tilt]),
+      opacity: useTransform(y, [-8, 0], [1, 0]),
+    },
+  } as const satisfies Pull["panels"];
+  const [armed, setArmed] = useState<PullAction | null>(null);
   /** Where the list was when the touch began. A touch can catch it on its way back. */
   const start = useRef(0);
+  /** The pulls that the page position allowed when the touch began. */
+  const startedAt = useRef({ top: false, bottom: false });
+  const clearable = onClear !== null;
   const clickGuard = useClickGuard();
   const { haptics } = useFeedback();
 
@@ -71,37 +106,41 @@ export function usePull(
     ({ first, last, tap, movement: [, distance], cancel }) => {
       if (paused) {
         cancel();
-        if (armed) setArmed(false);
+        if (armed !== null) setArmed(null);
         settle();
         return;
       }
       if (first) {
-        if (!atTop()) {
+        startedAt.current = { top: atTop(), bottom: clearable && atBottom() };
+        if (!startedAt.current.top && !startedAt.current.bottom) {
           cancel();
           return;
         }
         y.stop();
         start.current = y.get();
       }
-      const threshold = panelRef.current?.offsetHeight ?? 0;
-      const offset = pullOffset(start.current + distance, threshold);
+      const { offset, armed: next } = pullState(start.current + distance, {
+        add: startedAt.current.top ? (addPanelRef.current?.offsetHeight ?? 0) : null,
+        clear: startedAt.current.bottom ? (clearPanelRef.current?.offsetHeight ?? 0) : null,
+      });
       if (!last) {
         y.set(offset);
-        const next = pullArmed(offset, threshold);
         if (next !== armed) {
           setArmed(next);
-          if (next) haptics.tap();
+          if (next !== null) haptics.tap();
         }
         return;
       }
       if (!tap) clickGuard.arm();
-      setArmed(false);
-      if (pullArmed(offset, threshold)) {
+      setArmed(null);
+      if (next === "add") {
         // The new row takes the place of the panel. The layout animation of the rows
         // keeps them where they are, and they then follow the list back up.
         // iOS opens the keyboard only for a focus inside the touch event, so the new row
         // must render and take the focus now, not after this native event handler.
-        flushSync(onPull);
+        flushSync(onAdd);
+      } else if (next === "clear") {
+        onClear?.();
       }
       settle();
     },
@@ -115,21 +154,25 @@ export function usePull(
   );
   const { onPointerDown } = bind();
 
-  // A browser scrolls or bounces when a finger moves down at the top of the page.
-  // While a pull can happen, the pull takes that move instead.
+  // A browser scrolls or bounces when a finger moves down at the top of the page, or up at
+  // the end of it. While a pull can happen, the pull takes that move instead.
   useEffect(() => {
     const area = areaRef.current;
     if (area === null || !enabled) return;
     let startY = 0;
     let startedAtTop = false;
+    let startedAtBottom = false;
     const onTouchStart = (event: TouchEvent) => {
       startY = event.touches[0]?.clientY ?? 0;
       startedAtTop = atTop();
+      startedAtBottom = clearable && atBottom();
     };
     const onTouchMove = (event: TouchEvent) => {
       const touch = event.touches[0];
-      if (!startedAtTop || event.touches.length !== 1 || touch === undefined) return;
-      if (touch.clientY > startY && event.cancelable) event.preventDefault();
+      if (event.touches.length !== 1 || touch === undefined || !event.cancelable) return;
+      const pulls =
+        (startedAtTop && touch.clientY > startY) || (startedAtBottom && touch.clientY < startY);
+      if (pulls) event.preventDefault();
     };
     area.addEventListener("touchstart", onTouchStart, { passive: true });
     area.addEventListener("touchmove", onTouchMove, { passive: false });
@@ -137,12 +180,11 @@ export function usePull(
       area.removeEventListener("touchstart", onTouchStart);
       area.removeEventListener("touchmove", onTouchMove);
     };
-  }, [areaRef, enabled]);
+  }, [areaRef, enabled, clearable]);
 
   return {
     y,
-    panelTilt,
-    panelOpacity,
+    panels,
     armed,
     onPointerDown: (event) => {
       clickGuard.reset();

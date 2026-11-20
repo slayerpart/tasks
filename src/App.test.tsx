@@ -114,7 +114,7 @@ describe("App", () => {
   it("puts only the last active row in the tab order and moves between rows with the arrow keys", async () => {
     const { user } = await renderApp();
     await addTasks(user, ["Milk", "Bread"]);
-    screen.getByRole("button", { name: "Add task" }).focus();
+    screen.getByRole("button", { name: "List actions" }).focus();
 
     await user.tab();
     expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: "Bread" }));
@@ -331,5 +331,99 @@ describe("undo", () => {
     await waitFor(() => {
       expect(toast()).toBeNull();
     });
+  });
+});
+
+describe("clear completed", () => {
+  /** Adds tasks and completes the ones in `done`. */
+  async function setUp(names: readonly string[], done: readonly string[]) {
+    const app = await renderApp();
+    await addTasks(app.user, names);
+    for (const name of done) {
+      await app.user.click(screen.getByRole("checkbox", { name }));
+    }
+    return app;
+  }
+
+  const toastText = () =>
+    screen.queryByRole("button", { name: "Undo" })?.closest("[data-toast]")?.textContent;
+
+  it("clears the completed tasks with Shift+Backspace, and Undo brings them back", async () => {
+    const { user, feedback } = await setUp(["Milk", "Bread", "Eggs"], ["Milk", "Eggs"]);
+    screen.getByRole("button", { name: "Edit Bread" }).focus();
+    feedback.length = 0;
+
+    await user.keyboard("{Shift>}{Backspace}{/Shift}");
+
+    await waitFor(() => {
+      expect(titles()).toEqual(["Bread"]);
+    });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Bread" }));
+    expect(toastText()).toContain("Cleared 2 completed tasks");
+    expect(feedback).toEqual([{ kind: "sound", sound: "delete" }, { kind: "tap" }]);
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => {
+      expect(tasks()).toEqual([
+        { title: "Bread", done: false },
+        { title: "Eggs", done: true },
+        { title: "Milk", done: true },
+      ]);
+    });
+  });
+
+  it("moves the focus from a cleared task to the last open task", async () => {
+    const { user } = await setUp(["Milk", "Bread", "Eggs"], ["Eggs"]);
+    screen.getByRole("button", { name: "Edit Eggs" }).focus();
+
+    await user.keyboard("{Shift>}{Backspace}{/Shift}");
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Bread" }));
+    expect(toastText()).toContain("Cleared 1 completed task");
+  });
+
+  it("moves the focus to the Add task button when no open task is left", async () => {
+    const { user } = await setUp(["Milk"], ["Milk"]);
+    screen.getByRole("button", { name: "Edit Milk" }).focus();
+
+    await user.keyboard("{Shift>}{Backspace}{/Shift}");
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add task" }));
+  });
+
+  it("does nothing when no task is completed", async () => {
+    const { user, feedback } = await setUp(["Milk"], []);
+    screen.getByRole("button", { name: "Edit Milk" }).focus();
+    feedback.length = 0;
+
+    await user.keyboard("{Shift>}{Backspace}{/Shift}");
+
+    expect(titles()).toEqual(["Milk"]);
+    expect(feedback).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("clears the completed tasks from the list menu", async () => {
+    const { user } = await setUp(["Milk", "Bread"], ["Milk"]);
+
+    await user.click(screen.getByRole("button", { name: "List actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Clear completed" }));
+
+    await waitFor(() => {
+      expect(titles()).toEqual(["Bread"]);
+    });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "List actions" }));
+    expect(toastText()).toContain("Cleared 1 completed task");
+  });
+
+  it("disables Clear completed in the list menu when no task is completed", async () => {
+    const { user } = await setUp(["Milk"], []);
+
+    await user.click(screen.getByRole("button", { name: "List actions" }));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Clear completed" }).getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 });
