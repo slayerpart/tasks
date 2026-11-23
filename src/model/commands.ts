@@ -149,3 +149,13 @@ export function clearCompleted(
   const taskIds = completedTasks(state, listId).map((task) => task.id);
   return { ...mutationBase(context), type: "clearCompleted", listId, taskIds };
 }
+
+/** Completes the open tasks that the list shows now. */
+export function completeTasks(
+  state: State,
+  context: CommandContext,
+  listId: ListId,
+): MutationOf<"completeTasks"> {
+  const taskIds = openTasks(state, listId).map((task) => task.id);
+  return { ...mutationBase(context), type: "completeTasks", listId, taskIds };
+}

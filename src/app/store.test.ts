@@ -13,6 +13,19 @@ describe("openAppStore", () => {
     expect(visibleLists(store.getSnapshot().state).map((list) => list.title)).toEqual(["Tasks"]);
   });
 
+  it("does not create a first list again after the user deleted all lists", async () => {
+    const local = createMemoryLocalStore();
+    const first = await openAppStore(local);
+    const listId = visibleLists(first.getSnapshot().state)[0]?.id;
+    if (listId === undefined) throw new Error("Setup failed.");
+    first.dispatch(commands.deleteList(context, listId));
+    await first.idle();
+
+    const second = await openAppStore(local);
+
+    expect(visibleLists(second.getSnapshot().state)).toEqual([]);
+  });
+
   it("keeps the lists that exist", async () => {
     const local = createMemoryLocalStore();
     const first = await openAppStore(local);

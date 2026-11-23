@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyMutation } from "./apply.ts";
 import * as commands from "./commands.ts";
 import type { Mutation } from "./mutations.ts";
-import { displayTasks, openTasks, visibleLists } from "./selectors.ts";
+import { displayLists, displayTasks, openTasks, visibleLists } from "./selectors.ts";
 import { emptyState, type ListId, type State, type TaskId } from "./types.ts";
 
 /** A context with a clock that moves 1 second per call and counting IDs. */
@@ -181,6 +181,29 @@ describe("task commands", () => {
     expect(displayTasks(state, listId).map(({ task }) => task.title)).toEqual(["Bread"]);
   });
 
+  it("completes all open tasks of the list and keeps their order", () => {
+    const context = testContext();
+    const created = stateWithList(context);
+    const listId = created.listId;
+    let state = created.state;
+    // Each new task goes first, so the order differs from the order of the IDs.
+    for (const title of ["Eggs", "Bread", "Milk"]) {
+      state = run(state, commands.createTask(state, context, listId, 0, title));
+    }
+    const bread = openTasks(state, listId)[1];
+    if (bread === undefined) throw new Error("Setup failed.");
+    // A task that is completed already keeps its place at the end.
+    state = run(state, commands.completeTask(context, bread.id));
+
+    state = run(state, commands.completeTasks(state, context, listId));
+
+    expect(displayTasks(state, listId).map(({ kind, task }) => [kind, task.title])).toEqual([
+      ["completed", "Milk"],
+      ["completed", "Eggs"],
+      ["completed", "Bread"],
+    ]);
+  });
+
   it("hides the tasks of a deleted list", () => {
     const context = testContext();
     const created = stateWithList(context);
@@ -251,5 +274,22 @@ describe("list commands", () => {
     state = run(state, commands.moveList(state, context, work.id, 2));
 
     expect(visibleLists(state).map((list) => list.title)).toEqual(["Groceries", "Home", "Work"]);
+  });
+
+  it("counts the open tasks of each list and spreads the heat over the lists", () => {
+    const context = testContext();
+    const created = stateWithList(context);
+    let state = addTasks(created.state, context, created.listId, ["Milk", "Bread"]);
+    const milk = openTasks(state, created.listId)[0];
+    if (milk === undefined) throw new Error("Setup failed.");
+    state = run(state, commands.completeTask(context, milk.id));
+    state = run(state, commands.createList(state, context, 1, "Work"));
+
+    expect(
+      displayLists(state).map(({ list, heat, openCount }) => [list.title, heat, openCount]),
+    ).toEqual([
+      ["Groceries", 0, 1],
+      ["Work", 0.2, 0],
+    ]);
   });
 });

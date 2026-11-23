@@ -1,6 +1,6 @@
 import { mutationBase, type CommandContext } from "./commands.ts";
 import type { Mutation } from "./mutations.ts";
-import type { State, Task, TaskId } from "./types.ts";
+import type { ListId, State, Task, TaskId, TaskList } from "./types.ts";
 
 /**
  * Returns the change that undoes `mutation`, made at the time of the undo.
@@ -12,17 +12,31 @@ export function inverseOf(
   mutation: Mutation,
   context: CommandContext,
 ): Mutation | null {
+  const visibleList = (listId: ListId): TaskList | null => {
+    const list = before.lists.get(listId);
+    return list?.deletedAt === null ? list : null;
+  };
   const visibleTask = (taskId: TaskId): Task | null => {
     const task = before.tasks.get(taskId);
     return task?.deletedAt === null ? task : null;
   };
   switch (mutation.type) {
-    // The UI does not change lists yet. They get undo with the screen for lists.
     case "createList":
-    case "renameList":
-    case "moveList":
+      if (before.lists.has(mutation.listId)) return null;
+      return { ...mutationBase(context), type: "deleteList", listId: mutation.listId };
+    case "renameList": {
+      const list = visibleList(mutation.listId);
+      if (list === null || list.title === mutation.title) return null;
+      return { ...mutationBase(context), type: "renameList", listId: list.id, title: list.title };
+    }
+    case "moveList": {
+      const list = visibleList(mutation.listId);
+      if (list === null) return null;
+      return { ...mutationBase(context), type: "moveList", listId: list.id, order: list.order };
+    }
     case "deleteList":
-      return null;
+      if (visibleList(mutation.listId) === null) return null;
+      return { ...mutationBase(context), type: "restoreList", listId: mutation.listId };
     case "createTask":
       if (before.tasks.has(mutation.taskId)) return null;
       return { ...mutationBase(context), type: "deleteTask", taskId: mutation.taskId };
@@ -63,7 +77,18 @@ export function inverseOf(
       if (taskIds.length === 0) return null;
       return { ...mutationBase(context), type: "restoreTasks", taskIds };
     }
+    case "completeTasks": {
+      const tasks = mutation.taskIds.flatMap((taskId) => {
+        const task = visibleTask(taskId);
+        return task?.completedAt === null ? [{ taskId, order: task.order }] : [];
+      });
+      if (tasks.length === 0) return null;
+      return { ...mutationBase(context), type: "uncompleteTasks", tasks };
+    }
+    // Undo does not undo itself. Each of these comes only from an undo.
+    case "restoreList":
     case "restoreTasks":
+    case "uncompleteTasks":
       return null;
   }
 }

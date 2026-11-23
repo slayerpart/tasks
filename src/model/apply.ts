@@ -10,7 +10,7 @@ type TaskPatch = Partial<Pick<Task, "title" | "order" | "completedAt" | "deleted
  *
  * A create for an existing ID and a change to a missing or deleted row have no effect.
  * This makes a repeated mutation harmless, and a delete wins over later changes.
- * Only a restore brings a deleted task back.
+ * Only a restore brings a deleted row back.
  */
 export function applyMutation(state: State, mutation: Mutation): State {
   const { at } = mutation;
@@ -31,6 +31,11 @@ export function applyMutation(state: State, mutation: Mutation): State {
       return updateList(state, mutation.listId, at, { order: mutation.order });
     case "deleteList":
       return updateList(state, mutation.listId, at, { deletedAt: at });
+    case "restoreList": {
+      const list = state.lists.get(mutation.listId);
+      if (list === undefined || list.deletedAt === null) return state;
+      return putList(state, { ...list, deletedAt: null, updatedAt: at });
+    }
     case "createTask":
       if (state.tasks.has(mutation.taskId)) return state;
       return putTask(state, {
@@ -45,11 +50,8 @@ export function applyMutation(state: State, mutation: Mutation): State {
       });
     case "renameTask":
       return updateTask(state, mutation.taskId, at, { title: mutation.title });
-    case "completeTask": {
-      const task = state.tasks.get(mutation.taskId);
-      if (task !== undefined && task.completedAt !== null) return state;
-      return updateTask(state, mutation.taskId, at, { completedAt: mutation.completedAt ?? at });
-    }
+    case "completeTask":
+      return completeOne(state, mutation.taskId, at, mutation.completedAt ?? at);
     case "uncompleteTask":
       return updateTask(state, mutation.taskId, at, { completedAt: null, order: mutation.order });
     case "moveTask":
@@ -61,6 +63,13 @@ export function applyMutation(state: State, mutation: Mutation): State {
         (next, taskId) => updateTask(next, taskId, at, { deletedAt: at }),
         state,
       );
+    case "completeTasks":
+      return mutation.taskIds.reduce((next, taskId) => completeOne(next, taskId, at, at), state);
+    case "uncompleteTasks":
+      return mutation.tasks.reduce(
+        (next, { taskId, order }) => updateTask(next, taskId, at, { completedAt: null, order }),
+        state,
+      );
     case "restoreTasks":
       return mutation.taskIds.reduce((next, taskId) => {
         const task = next.tasks.get(taskId);
@@ -68,6 +77,12 @@ export function applyMutation(state: State, mutation: Mutation): State {
         return putTask(next, { ...task, deletedAt: null, updatedAt: at });
       }, state);
   }
+}
+
+/** A completed task keeps its completion time. */
+function completeOne(state: State, id: TaskId, at: IsoTimestamp, completedAt: IsoTimestamp): State {
+  if (state.tasks.get(id)?.completedAt != null) return state;
+  return updateTask(state, id, at, { completedAt });
 }
 
 function putList(state: State, list: TaskList): State {

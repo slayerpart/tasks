@@ -6,7 +6,6 @@ import {
   type CommandContext,
 } from "../model/commands.ts";
 import type { Mutation } from "../model/mutations.ts";
-import { visibleLists } from "../model/selectors.ts";
 import type { MutationId, State } from "../model/types.ts";
 import { inverseOf } from "../model/undo.ts";
 import type { LocalStore } from "../storage/local-store.ts";
@@ -109,8 +108,10 @@ export async function openAppStore(
     },
   };
 
-  if (visibleLists(snapshot.state).length === 0) {
-    store.dispatch(createList(snapshot.state, context, 0, firstListTitle));
+  // Only on the first start. A user who deletes all lists keeps no lists.
+  // The first list is not a change of the user, so there is no undo for it.
+  if (snapshot.state.lists.size === 0) {
+    apply(createList(snapshot.state, context, 0, firstListTitle));
   }
   return store;
 }

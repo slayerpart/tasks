@@ -22,6 +22,8 @@ export type Mutation = MutationBase &
     | { readonly type: "renameList"; readonly listId: ListId; readonly title: string }
     | { readonly type: "moveList"; readonly listId: ListId; readonly order: OrderKey }
     | { readonly type: "deleteList"; readonly listId: ListId }
+    /** Brings back a deleted list with its tasks. Undo uses it after a delete. */
+    | { readonly type: "restoreList"; readonly listId: ListId }
     | {
         readonly type: "createTask";
         readonly taskId: TaskId;
@@ -46,6 +48,16 @@ export type Mutation = MutationBase &
         readonly listId: ListId;
         readonly taskIds: readonly TaskId[];
       }
+    | {
+        readonly type: "completeTasks";
+        readonly listId: ListId;
+        readonly taskIds: readonly TaskId[];
+      }
+    /** Undo uses it after a complete of many tasks. Each task gets its old place back. */
+    | {
+        readonly type: "uncompleteTasks";
+        readonly tasks: readonly { readonly taskId: TaskId; readonly order: OrderKey }[];
+      }
   );
 
 export type MutationOf<Type extends Mutation["type"]> = Extract<Mutation, { readonly type: Type }>;
@@ -60,6 +72,7 @@ export function referencedIds(mutation: Mutation): {
     case "renameList":
     case "moveList":
     case "deleteList":
+    case "restoreList":
       return { listIds: [mutation.listId], taskIds: [] };
     case "createTask":
     case "renameTask":
@@ -69,7 +82,10 @@ export function referencedIds(mutation: Mutation): {
     case "deleteTask":
       return { listIds: [], taskIds: [mutation.taskId] };
     case "clearCompleted":
+    case "completeTasks":
     case "restoreTasks":
       return { listIds: [], taskIds: mutation.taskIds };
+    case "uncompleteTasks":
+      return { listIds: [], taskIds: mutation.tasks.map(({ taskId }) => taskId) };
   }
 }
