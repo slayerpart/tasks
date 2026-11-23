@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { longPressDrag, pull, toggleTask } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -24,7 +25,7 @@ function title(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await openFirstList(page);
 });
 
 test.describe("on touch", () => {

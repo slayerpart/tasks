@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { toggleTask } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -27,7 +28,7 @@ async function tapBelowList(page: Page): Promise<void> {
 
 test.beforeEach(async ({ page, hasTouch }) => {
   test.skip(!hasTouch, "Only touch screens add a task with a tap below the list.");
-  await page.goto("/");
+  await openFirstList(page);
   await expect(page.getByRole("heading", { level: 1, name: "Tasks" })).toBeVisible();
 });
 

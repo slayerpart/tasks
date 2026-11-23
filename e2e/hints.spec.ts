@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { openFirstList } from "./app.ts";
 
 function tips(page: Page) {
   return page.getByRole("list", { name: "Tips" }).getByRole("listitem");
@@ -14,7 +15,7 @@ async function addTask(page: Page, title: string): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await openFirstList(page);
 });
 
 test("an empty list tells the user how to add a task on this device", async ({

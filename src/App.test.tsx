@@ -5,10 +5,13 @@ import { App } from "./App.tsx";
 import { openAppStore } from "./app/store.ts";
 import { StoreProvider } from "./app/store-context.tsx";
 import { FeedbackProvider } from "./feedback/feedback-context.tsx";
+import * as commands from "./model/commands.ts";
+import { visibleLists } from "./model/selectors.ts";
 import { createMemoryLocalStore } from "./test/memory-local-store.ts";
 import { createRecordingFeedback } from "./test/recording-feedback.ts";
 
-async function renderApp() {
+/** Renders the app on the lists screen of a new device. */
+async function renderLists() {
   const store = await openAppStore(createMemoryLocalStore());
   const { feedback, events } = createRecordingFeedback();
   const user = userEvent.setup({
@@ -24,6 +27,13 @@ async function renderApp() {
     </StoreProvider>,
   );
   return { store, user, feedback: events };
+}
+
+/** Renders the app and opens the first list, which every new device has. */
+async function renderApp() {
+  const rendered = await renderLists();
+  await rendered.user.click(screen.getByRole("link", { name: "Tasks" }));
+  return rendered;
 }
 
 /** The task list in display order. Each row has one checkbox, named after its task. */
@@ -627,5 +637,88 @@ describe("row actions menu", () => {
     await user.click(screen.getByRole("menuitem", { name: action }));
 
     expect(screen.getByText(message).closest('[role="status"]')).not.toBeNull();
+  });
+});
+
+describe("navigation", () => {
+  /** The text that screen readers read after the name. */
+  function description(element: HTMLElement): string {
+    const id = element.getAttribute("aria-describedby") ?? "";
+    return document.getElementById(id)?.textContent ?? "";
+  }
+
+  async function back(): Promise<void> {
+    const popped = new Promise((resolve) => {
+      window.addEventListener("popstate", resolve, { once: true });
+    });
+    window.history.back();
+    await popped;
+  }
+
+  it("opens on the lists screen on a new device", async () => {
+    await renderLists();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Lists" })).toBeDefined();
+    const lists = within(screen.getByRole("list", { name: "Lists" }));
+    const link = lists.getByRole("link", { name: "Tasks" });
+    expect(lists.getAllByRole("link")).toEqual([link]);
+    expect(description(link)).toBe("0 open tasks");
+    expect(document.title).toBe("Lists - Tasks");
+  });
+
+  it("opens a list at its own URL and gives it the focus", async () => {
+    const { store } = await renderApp();
+    const list = visibleLists(store.getSnapshot().state)[0];
+
+    expect(window.location.pathname).toBe(`/lists/${list?.id ?? ""}`);
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Tasks" }));
+    expect(document.title).toBe("Tasks - Tasks");
+  });
+
+  it("goes back to the lists screen with the Lists link, with the focus on the list", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread"]);
+
+    await user.click(screen.getByRole("link", { name: "Lists" }));
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+    });
+
+    const link = screen.getByRole("link", { name: "Tasks" });
+    expect(description(link)).toBe("2 open tasks");
+    expect(document.activeElement).toBe(link);
+  });
+
+  it("goes back to the lists screen with browser back", async () => {
+    await renderApp();
+
+    await act(back);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Lists" })).toBeDefined();
+  });
+
+  it("shows the lists screen for an unknown path", async () => {
+    window.history.replaceState(null, "", "/unknown");
+
+    await renderLists();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Lists" })).toBeDefined();
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("goes to the lists screen when the open list is deleted", async () => {
+    const { store } = await renderApp();
+    const list = visibleLists(store.getSnapshot().state)[0];
+    if (list === undefined) throw new Error("Setup failed.");
+
+    act(() => {
+      store.dispatch(commands.deleteList(commands.browserCommandContext, list.id));
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "Lists" })).toBeDefined();
   });
 });

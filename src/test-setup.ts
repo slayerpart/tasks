@@ -9,4 +9,7 @@ Element.prototype.scrollIntoView = () => undefined;
 
 afterEach(() => {
   cleanup();
+  // Each test starts on the first screen of a new device.
+  window.history.replaceState(null, "", "/");
+  localStorage.clear();
 });

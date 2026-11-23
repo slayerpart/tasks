@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -33,7 +34,7 @@ function reachable(page: Page, name: string): Promise<boolean> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await openFirstList(page);
   await addTasks(page, ["Milk", "Bread", "Eggs"]);
 });
 
@@ -84,7 +85,13 @@ test("a menu that fits on neither side scrolls in the larger space", async ({ pa
   expect(menu).not.toBeNull();
   expect(anchor).not.toBeNull();
   if (menu === null || anchor === null) return;
-  expect(menu.y).toBeGreaterThanOrEqual(anchor.y + anchor.height);
+  const spaceBelow = 360 - (anchor.y + anchor.height);
+  if (spaceBelow >= anchor.y) {
+    expect(menu.y).toBeGreaterThanOrEqual(anchor.y + anchor.height);
+  } else {
+    expect(menu.y + menu.height).toBeLessThanOrEqual(anchor.y);
+  }
+  expect(menu.y).toBeGreaterThanOrEqual(0);
   expect(menu.y + menu.height).toBeLessThanOrEqual(360);
   await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "Delete" })).toBeInViewport();

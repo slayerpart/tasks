@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { pull } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -20,7 +21,7 @@ function titles(page: Page): Promise<string[]> {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await openFirstList(page);
 });
 
 test("a pull down past one row adds a task at the top", async ({ page }) => {

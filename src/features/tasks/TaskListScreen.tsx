@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { goUp, isPlainClick, routePath } from "../../app/router.ts";
 import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import type { Sound } from "../../feedback/feedback.ts";
@@ -535,9 +536,27 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       }}
     >
       <header className={styles["header"]}>
-        <h1 id={headingId} className={styles["heading"]}>
-          {list.title}
-        </h1>
+        <a
+          href={routePath({ screen: "lists" })}
+          className={styles["back"]}
+          onClick={(event) => {
+            if (!isPlainClick(event.nativeEvent)) return;
+            event.preventDefault();
+            goUp();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+            <path
+              d="M15 5l-7 7 7 7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Lists
+        </a>
         <div className={styles["headerActions"]}>
           <button
             ref={addButtonRef}
@@ -571,6 +590,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
             ]}
           />
         </div>
+        <h1 id={headingId} className={styles["heading"]}>
+          {list.title}
+        </h1>
       </header>
       <div className={styles["pullArea"]}>
         <motion.div ref={pullContentRef} className={styles["pullContent"]} style={{ y: pull.y }}>

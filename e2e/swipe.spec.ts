@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { swipe } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -32,7 +33,7 @@ function row(page: Page, title: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
+  await openFirstList(page);
   await addTasks(page, ["Milk", "Bread", "Eggs"]);
 });
 

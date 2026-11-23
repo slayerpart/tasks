@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
+import { startRouting } from "./app/router.ts";
 import { openAppStore } from "./app/store.ts";
 import { StoreProvider } from "./app/store-context.tsx";
 import { FeedbackProvider } from "./feedback/feedback-context.tsx";
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   }
   applyTheme(defaultTheme, document.documentElement);
   guardAgainstTextSelection(document);
+  startRouting();
 
   const store = await openAppStore(await openLocalStore(databaseName));
   const feedback = {

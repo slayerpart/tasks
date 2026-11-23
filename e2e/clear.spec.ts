@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { pull, toggleTask } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -25,7 +26,7 @@ async function expectTitles(page: Page, expected: readonly string[]): Promise<vo
 }
 
 test.beforeEach(async ({ page, hasTouch }) => {
-  await page.goto("/");
+  await openFirstList(page);
   await addTasks(page, ["Milk", "Bread", "Eggs"]);
   await toggleTask(page, hasTouch, "Milk");
   await toggleTask(page, hasTouch, "Eggs");

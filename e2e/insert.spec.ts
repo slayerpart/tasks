@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { spreadApart } from "./gestures.ts";
+import { openFirstList } from "./app.ts";
 
 async function addTasks(page: Page, titles: readonly string[]): Promise<void> {
   await page.getByRole("button", { name: "Add task" }).click();
@@ -31,7 +32,7 @@ async function lineBelow(page: Page, title: string): Promise<{ x: number; y: num
 test.describe("with a mouse", () => {
   test.beforeEach(async ({ page, hasTouch }) => {
     test.skip(hasTouch, "Touch screens spread two fingers instead.");
-    await page.goto("/");
+    await openFirstList(page);
     await addTasks(page, ["Milk", "Bread", "Eggs"]);
   });
 
@@ -101,7 +102,7 @@ test.describe("with a mouse", () => {
 
 test.describe("with two fingers", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    await openFirstList(page);
     await addTasks(page, ["Milk", "Bread", "Eggs"]);
   });
 
