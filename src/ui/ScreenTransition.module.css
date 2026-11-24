@@ -64,6 +64,26 @@
   animation: fadeOut 100ms ease-out both;
 }
 
+/*
+ * Between two lists, the controls of the header are the same, so they stay. Only the title
+ * changes. The new controls are in front, at the same place.
+ */
+.frame[data-transition="switch"][data-phase] header {
+  animation: none;
+}
+
+.frame[data-transition="switch"][data-phase="enter"] h1 {
+  animation: fadeIn var(--transition-ms) ease-out var(--transition-delay, 0ms) both;
+}
+
+.frame[data-transition="switch"][data-phase="leave"] header > :not(h1) {
+  visibility: hidden;
+}
+
+.frame[data-transition="switch"][data-phase="leave"] h1 {
+  animation: fadeOut 100ms ease-out both;
+}
+
 /* With reduced motion, the whole screen only fades. Rows do not move. */
 .frame[data-reduced][data-phase="enter"] {
   animation: fadeIn var(--transition-ms) ease-out both;

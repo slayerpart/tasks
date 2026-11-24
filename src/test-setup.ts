@@ -14,3 +14,14 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
   localStorage.clear();
 });
+
+// jsdom has no modal dialogs. These do what the tests need: open, close and the close event.
+// E2E tests cover the real focus and the top layer.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  this.open = true;
+};
+HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+  if (!this.open) return;
+  this.open = false;
+  this.dispatchEvent(new Event("close"));
+};

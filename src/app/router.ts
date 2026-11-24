@@ -94,6 +94,20 @@ export function openList(listId: ListId): void {
 }
 
 /**
+ * Shows a list in place of the list on display, so browser back still goes up to the lists
+ * screen. From the lists screen, opens the list as usual.
+ */
+export function switchList(listId: ListId): void {
+  if (!isListEntry(window.history.state)) {
+    openList(listId);
+    return;
+  }
+  const entry: ListEntry = { up: true };
+  window.history.replaceState(entry, "", routePath({ screen: "list", listId }));
+  notify();
+}
+
+/**
  * True for a click that the app handles itself. A click with a modifier key opens the link in
  * a new tab or window, as usual.
  */

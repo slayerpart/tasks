@@ -1,12 +1,23 @@
 import { AnimatePresence, MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
-import { goUp, rememberRoute, savedListsScroll, showLists, useRoute } from "./app/router.ts";
-import { useAppSnapshot } from "./app/store-context.tsx";
+import {
+  goUp,
+  rememberRoute,
+  savedListsScroll,
+  showLists,
+  switchList,
+  useRoute,
+} from "./app/router.ts";
+import { useAppSnapshot, useAppStore } from "./app/store-context.tsx";
+import { useFeedback } from "./feedback/feedback-context.tsx";
 import { ListsScreen } from "./features/lists/ListsScreen.tsx";
+import { ListSwitcher, type SwitcherChoice } from "./features/switcher/ListSwitcher.tsx";
 import { TaskListScreen } from "./features/tasks/TaskListScreen.tsx";
+import * as commands from "./model/commands.ts";
 import type { ListId } from "./model/types.ts";
 import { ScreenTransition, type Transition } from "./ui/ScreenTransition.tsx";
+import { isSwitcherKey } from "./ui/shortcuts.ts";
 
 const appName = "Tasks";
 
@@ -20,10 +31,30 @@ interface Shown {
 function transitionBetween(from: ListId | null, to: ListId | null): Transition | null {
   if (from === null && to !== null) return { kind: "open", listId: to };
   if (from !== null && to === null) return { kind: "up", listId: from };
+  if (from !== null && to !== null) return { kind: "switch", listId: to };
   return null;
 }
 
+/**
+ * Gives the focus to the row with this ID on the screen on display, for example after its
+ * title field has closed. Without that row, the screen takes the focus, as when it opens.
+ */
+function focusScreen(rowId: string | null): void {
+  const screen = document.querySelector("main [data-screen]:not([inert])");
+  const row =
+    rowId === null
+      ? null
+      : screen?.querySelector<HTMLElement>(
+          `[data-row-id="${rowId}"] :is([data-control="title"], [data-control="open"])`,
+        );
+  (row ?? screen?.querySelector<HTMLElement>('section[tabindex="-1"]'))?.focus({
+    preventScroll: true,
+  });
+}
+
 export function App() {
+  const store = useAppStore();
+  const feedback = useFeedback();
   const { state, saveFailed } = useAppSnapshot();
   const route = useRoute();
   const listId = route?.screen === "list" ? route.listId : null;
@@ -56,6 +87,41 @@ export function App() {
     document.title = list === null ? `Lists - ${appName}` : `${list.title} - ${appName}`;
   }, [route, known, list]);
 
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (!isSwitcherKey(event)) return;
+      // An open menu keeps its keys. Its own Escape closes it first.
+      if (event.target instanceof Element && event.target.closest('[role="menu"]') !== null) {
+        return;
+      }
+      event.preventDefault();
+      if (!event.repeat) setSwitcherOpen((open) => !open);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  function openSwitcher(): void {
+    setSwitcherOpen(true);
+  }
+
+  function choose(choice: SwitcherChoice): void {
+    setSwitcherOpen(false);
+    if (choice.kind === "create") {
+      // A new list goes first, as from the lists screen. Undo deletes it again.
+      const creation = commands.createList(state, commands.browserCommandContext, 0, choice.title);
+      store.dispatch(creation);
+      feedback.sounds.play("add");
+      feedback.haptics.tap();
+      switchList(creation.listId);
+    } else if (choice.listId !== shownListId) {
+      switchList(choice.listId);
+    }
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <main className={styles["main"]}>
@@ -69,9 +135,9 @@ export function App() {
             scrollY={list === null ? savedListsScroll() : 0}
           >
             {list === null ? (
-              <ListsScreen fromListId={lastListId} />
+              <ListsScreen fromListId={lastListId} onFindList={openSwitcher} />
             ) : (
-              <TaskListScreen list={list} />
+              <TaskListScreen list={list} onFindList={openSwitcher} />
             )}
           </ScreenTransition>
         </AnimatePresence>
@@ -83,6 +149,15 @@ export function App() {
         <p className={styles["visuallyHidden"]} role="status">
           {shown.transition?.kind === "up" && <span key={shown.count}>Lists</span>}
         </p>
+        <ListSwitcher
+          open={switcherOpen}
+          currentListId={shownListId}
+          onChoose={choose}
+          onClose={() => {
+            setSwitcherOpen(false);
+          }}
+          onFocusLost={focusScreen}
+        />
         <p className={styles["saveError"]} role="status">
           {saveFailed ? "Could not save the last change on this device." : ""}
         </p>

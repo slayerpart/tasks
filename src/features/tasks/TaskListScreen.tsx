@@ -23,6 +23,7 @@ import { useHoverInsert } from "../rows/use-hover-insert.ts";
 import { usePinch } from "../rows/use-pinch.ts";
 import { usePull } from "../rows/use-pull.ts";
 import { useReorder } from "../rows/use-reorder.ts";
+import { FindListButton } from "../switcher/FindListButton.tsx";
 import { previewOrder } from "./preview-order.ts";
 import { hintsFor } from "./task-hints.ts";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
@@ -46,7 +47,13 @@ function isRowControl(value: string | undefined): value is RowControl {
   return value === "check" || value === "title" || value === "menu" || value === "delete";
 }
 
-export function TaskListScreen({ list }: { list: TaskList }) {
+interface TaskListScreenProps {
+  readonly list: TaskList;
+  /** Opens the list switcher. */
+  readonly onFindList: () => void;
+}
+
+export function TaskListScreen({ list, onFindList }: TaskListScreenProps) {
   const store = useAppStore();
   const feedback = useFeedback();
   const { state } = useAppSnapshot();
@@ -557,6 +564,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           Lists
         </a>
         <div className={styles["headerActions"]}>
+          <FindListButton onClick={onFindList} />
           <button
             ref={addButtonRef}
             type="button"

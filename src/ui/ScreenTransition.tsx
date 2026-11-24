@@ -5,9 +5,12 @@ import { ScreenLeavingContext } from "./screen-leaving.ts";
 import { flyTitle } from "./title-flight.ts";
 import styles from "./ScreenTransition.module.css";
 
-/** A move between the lists screen and the list with this ID. */
+/**
+ * A move between the lists screen and the list with this ID, or from one list to the list
+ * with this ID.
+ */
 export interface Transition {
-  readonly kind: "open" | "up";
+  readonly kind: "open" | "up" | "switch";
   readonly listId: ListId;
 }
 
@@ -42,6 +45,8 @@ function titleEnds(
   frame: HTMLElement,
   transition: Transition,
 ): { source: HTMLElement; target: HTMLElement } | null {
+  // Between two lists, the old title fades out and the new title fades in.
+  if (transition.kind === "switch") return null;
   const rowTitle = (scope: ParentNode) =>
     [...scope.querySelectorAll<HTMLElement>("[data-row-id]")]
       .find((row) => row.dataset["rowId"] === transition.listId)
@@ -67,7 +72,7 @@ function isTransition(value: unknown): value is Transition {
     typeof value === "object" &&
     value !== null &&
     "kind" in value &&
-    (value.kind === "open" || value.kind === "up") &&
+    (value.kind === "open" || value.kind === "up" || value.kind === "switch") &&
     "listId" in value &&
     typeof value.listId === "string"
   );
@@ -203,7 +208,7 @@ export function ScreenTransition({ screen, transition, scrollY, children }: Scre
     // Motion ignores a removal in the same commit that starts the exit, so even a screen
     // without an animation leaves from a timer.
     // Nobody can reach the old screen, and assistive technology no longer sees it.
-    frame.inert = true;
+    frame.setAttribute("inert", "");
     frame.setAttribute("aria-hidden", "true");
     let duration = 0;
     if (isTransition(exit) && MotionGlobalConfig.skipAnimations !== true) {

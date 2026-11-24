@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
+  use,
   useEffect,
   useEffectEvent,
   useId,
@@ -17,6 +18,7 @@ import { referencedIds } from "../../model/mutations.ts";
 import { displayLists, heatAt, type DisplayList } from "../../model/selectors.ts";
 import type { ListId, MutationId } from "../../model/types.ts";
 import { rowSpring } from "../../ui/motion.ts";
+import { ScreenLeavingContext } from "../../ui/screen-leaving.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
 import type { MenuItem } from "../../ui/Menu.tsx";
 import { DraftRow } from "../rows/DraftRow.tsx";
@@ -31,6 +33,7 @@ import { useHoverInsert } from "../rows/use-hover-insert.ts";
 import { usePinch } from "../rows/use-pinch.ts";
 import { usePull } from "../rows/use-pull.ts";
 import { useReorder } from "../rows/use-reorder.ts";
+import { FindListButton } from "../switcher/FindListButton.tsx";
 import { listHintsFor } from "./list-hints.ts";
 import { ListRow, type ListControl } from "./ListRow.tsx";
 
@@ -60,13 +63,20 @@ function tasksText(count: number): string {
 interface ListsScreenProps {
   /** The list that the user came from. It gets the focus, so the user keeps their place. */
   readonly fromListId: ListId | null;
+  /** Opens the list switcher. */
+  readonly onFindList: () => void;
 }
 
 /** All lists, each with the number of its open tasks. A list opens its tasks. */
-export function ListsScreen({ fromListId }: ListsScreenProps) {
+export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
   const store = useAppStore();
   const feedback = useFeedback();
-  const { state } = useAppSnapshot();
+  const { state: liveState } = useAppSnapshot();
+  // A screen that leaves keeps the lists that it had. A list that the switcher creates must not
+  // push the leaving rows down.
+  const leaving = use(ScreenLeavingContext);
+  const [state, setState] = useState(liveState);
+  if (!leaving && state !== liveState) setState(liveState);
   const stored = displayLists(state);
   const count = stored.length;
   const headingId = useId();
@@ -510,6 +520,7 @@ export function ListsScreen({ fromListId }: ListsScreenProps) {
     >
       <header className={styles["header"]}>
         <div className={styles["headerActions"]}>
+          <FindListButton onClick={onFindList} />
           <button
             type="button"
             className={styles["add"]}

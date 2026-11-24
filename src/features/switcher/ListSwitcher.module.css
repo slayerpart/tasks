@@ -1,0 +1,220 @@
+/*
+ * The switcher floats near the top, so the on-screen keyboard of a phone does not cover it.
+ * It opens and closes with a short fade and scale. A closed dialog takes no input, so the
+ * animation never blocks the screen below.
+ */
+.dialog {
+  inline-size: min(32rem, 100% - 2rem);
+  max-inline-size: none;
+  max-block-size: none;
+  margin: max(10vh, env(safe-area-inset-top) + 1rem) auto auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--color-text) 12%, transparent);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1rem 3rem oklch(0% 0 0 / 0.3);
+  transition:
+    opacity 140ms ease-out,
+    scale 140ms ease-out,
+    display 140ms allow-discrete,
+    overlay 140ms allow-discrete;
+}
+
+.dialog:not([open]) {
+  opacity: 0;
+  scale: 0.96;
+  pointer-events: none;
+  transition-duration: 100ms;
+  transition-timing-function: ease-in;
+}
+
+.dialog::backdrop {
+  background-color: oklch(0% 0 0 / 0.35);
+  transition:
+    background-color 140ms ease-out,
+    display 140ms allow-discrete,
+    overlay 140ms allow-discrete;
+}
+
+.dialog:not([open])::backdrop {
+  background-color: transparent;
+  transition-duration: 100ms;
+}
+
+@starting-style {
+  .dialog[open] {
+    opacity: 0;
+    scale: 0.96;
+  }
+
+  .dialog[open]::backdrop {
+    background-color: transparent;
+  }
+}
+
+/* With reduced motion, the switcher only fades. */
+@media (prefers-reduced-motion: reduce) {
+  .dialog,
+  .dialog:not([open]) {
+    scale: none;
+  }
+
+  @starting-style {
+    .dialog[open] {
+      scale: none;
+    }
+  }
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding-inline: 1rem;
+  border-block-end: 1px solid color-mix(in oklch, var(--color-text) 12%, transparent);
+}
+
+/* The search field always has the focus. The line under it shows that. */
+.field:focus-within {
+  box-shadow: inset 0 -2px 0 var(--color-focus);
+}
+
+.field svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 3.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  /* 17 px. Phones zoom into fields with text smaller than 16 px. */
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+/* The line under the field shows the focus, in place of the ring around it. */
+.input:focus-visible {
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-completed-text);
+  opacity: 1;
+}
+
+.listbox {
+  max-block-size: min(22rem, 50dvh);
+  margin: 0;
+  padding: 0.375rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The active option. The ring shows it also where a fill is hard to see. */
+.option[aria-selected="true"] {
+  background: color-mix(in oklch, currentColor 10%, transparent);
+  box-shadow: inset 0 0 0 2px var(--color-focus);
+}
+
+/* The heat color of the list, as on the lists screen. */
+.swatch {
+  flex: none;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  border-radius: 50%;
+  background: color-mix(
+    in oklch,
+    var(--color-heat-start),
+    var(--color-heat-end) calc(var(--heat, 0) * 100%)
+  );
+}
+
+.plus {
+  flex: none;
+  margin-inline: -0.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+
+/* A long title wraps, so the whole name is readable, also when zoomed in. */
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.current,
+.count {
+  flex: none;
+  color: var(--color-completed-text);
+}
+
+.current {
+  font-size: 0.8125rem;
+}
+
+/* The muted color has too little contrast on the fill of the active option. */
+.option[aria-selected="true"] :is(.current, .count) {
+  color: inherit;
+}
+
+.count {
+  min-inline-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.empty {
+  margin: 0;
+  padding: 1rem;
+  color: var(--color-completed-text);
+}
+
+/* Forced colors remove shadows and fills. Outlines and borders stay. */
+@media (forced-colors: active) {
+  .field:focus-within {
+    box-shadow: none;
+    border-block-end: 2px solid Highlight;
+  }
+
+  .option[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

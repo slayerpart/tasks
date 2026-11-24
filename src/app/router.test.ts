@@ -8,7 +8,14 @@ async function back(): Promise<void> {
   await popped;
 }
 import type { ListId } from "../model/types.ts";
-import { parseRoute, rememberRoute, routePath, startRouting } from "./router.ts";
+import {
+  openList,
+  parseRoute,
+  rememberRoute,
+  routePath,
+  startRouting,
+  switchList,
+} from "./router.ts";
 
 const listId = "a1b2-c3" as ListId;
 
@@ -60,6 +67,35 @@ describe("startRouting", () => {
     window.history.pushState(null, "", "/lists/a1b2-c3");
 
     startRouting();
+
+    expect(window.location.pathname).toBe("/lists/a1b2-c3");
+    await back();
+    expect(window.location.pathname).toBe("/");
+  });
+});
+
+describe("switchList", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("shows the new list in place of the old one, so back still goes to the lists screen", async () => {
+    window.history.replaceState(null, "", "/");
+    openList(listId);
+    const length = window.history.length;
+
+    switchList("other" as ListId);
+
+    expect(window.location.pathname).toBe("/lists/other");
+    expect(window.history.length).toBe(length);
+    await back();
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("opens the list above the lists screen", async () => {
+    window.history.replaceState(null, "", "/");
+
+    switchList(listId);
 
     expect(window.location.pathname).toBe("/lists/a1b2-c3");
     await back();

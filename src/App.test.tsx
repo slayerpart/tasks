@@ -953,3 +953,171 @@ describe("lists screen", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
   });
 });
+
+describe("list switcher", () => {
+  /** Adds lists after the first list, so they get the next places. */
+  function addLists(store: Awaited<ReturnType<typeof renderLists>>["store"], names: string[]) {
+    for (const name of names) {
+      const { state } = store.getSnapshot();
+      const index = visibleLists(state).length;
+      act(() => {
+        store.dispatch(commands.createList(state, commands.browserCommandContext, index, name));
+      });
+    }
+  }
+
+  /** The open switcher, or null. A closed dialog is not in the accessibility tree. */
+  function switcher(): HTMLElement | null {
+    return screen.queryByRole("dialog", { name: "Go to list" });
+  }
+
+  function activeOption(): string {
+    const combobox = screen.getByRole("combobox", { name: "Find or create a list" });
+    const id = combobox.getAttribute("aria-activedescendant") ?? "";
+    return document.getElementById(id)?.querySelector("span:not([aria-hidden])")?.textContent ?? "";
+  }
+
+  it("opens with Ctrl+K, finds a list by part of its title, and shows it with Enter", async () => {
+    const { store, user } = await renderApp();
+    addLists(store, ["Groceries", "Work"]);
+
+    await user.keyboard("{Control>}k{/Control}");
+
+    expect(switcher()).not.toBeNull();
+    const combobox = screen.getByRole("combobox", { name: "Find or create a list" });
+    expect(document.activeElement).toBe(combobox);
+    const options = within(screen.getByRole("listbox", { name: "Lists" }));
+    expect(options.getAllByRole("option")).toHaveLength(3);
+    expect(
+      options.getByRole("option", { name: "Tasks, current list, 0 open tasks" }),
+    ).toBeDefined();
+    expect(activeOption()).toBe("Tasks");
+
+    await user.keyboard("ROC");
+    expect(options.getAllByRole("option")).toHaveLength(2);
+    expect(options.getByRole("option", { name: "Groceries, 0 open tasks" })).toBeDefined();
+    expect(options.getByRole("option", { name: "Create list “ROC”" })).toBeDefined();
+    expect(screen.getByText("1 list")).toBeDefined();
+    expect(activeOption()).toBe("Groceries");
+
+    await user.keyboard("{Enter}");
+
+    expect(switcher()).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: "Groceries" })).toBeDefined();
+    });
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Groceries" }));
+    // The new list is in place of the old one, so back goes up to the lists screen.
+    const popped = new Promise((resolve) => {
+      window.addEventListener("popstate", resolve, { once: true });
+    });
+    window.history.back();
+    await popped;
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("moves the active option with the arrow keys, around the ends", async () => {
+    const { store, user } = await renderLists();
+    addLists(store, ["Groceries", "Work"]);
+
+    await user.click(screen.getByRole("button", { name: "Go to list" }));
+    expect(activeOption()).toBe("Tasks");
+    await user.keyboard("{ArrowUp}");
+    expect(activeOption()).toBe("Work");
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(activeOption()).toBe("Groceries");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: "Groceries" })).toBeDefined();
+    });
+  });
+
+  it("creates a list with the search text, which undo deletes again", async () => {
+    const { store, user, feedback } = await renderLists();
+
+    await user.click(screen.getByRole("button", { name: "Go to list" }));
+    await user.keyboard("Trip to Rome");
+    expect(screen.getByText("No matching lists")).toBeDefined();
+    expect(activeOption()).toBe("Create list “Trip to Rome”");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: "Trip to Rome" })).toBeDefined();
+    });
+    expect(visibleLists(store.getSnapshot().state).map((list) => list.title)).toEqual([
+      "Trip to Rome",
+      "Tasks",
+    ]);
+    expect(feedback).toEqual([{ kind: "sound", sound: "add" }, { kind: "tap" }]);
+
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    expect(visibleLists(store.getSnapshot().state).map((list) => list.title)).toEqual(["Tasks"]);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+    });
+  });
+
+  it("closes with Cmd+K again, with the focus back where it was, and starts empty", async () => {
+    const { user } = await renderApp();
+    const region = screen.getByRole("region", { name: "Tasks" });
+
+    await user.keyboard("{Control>}k{/Control}");
+    await user.keyboard("Gro");
+    await user.keyboard("{Control>}k{/Control}");
+
+    expect(switcher()).toBeNull();
+    expect(document.activeElement).toBe(region);
+
+    await user.keyboard("{Control>}k{/Control}");
+    expect(screen.getByRole("combobox", { name: "Find or create a list" })).toHaveProperty(
+      "value",
+      "",
+    );
+  });
+
+  it("stays on the list when the user chooses the list on display", async () => {
+    const { user } = await renderApp();
+    const region = screen.getByRole("region", { name: "Tasks" });
+
+    await user.keyboard("{Control>}k{/Control}{Enter}");
+
+    expect(switcher()).toBeNull();
+    expect(screen.getByRole("region", { name: "Tasks" })).toBe(region);
+    expect(document.activeElement).toBe(region);
+  });
+
+  it("opens only with Ctrl+K on keyboards other than Apple keyboards", async () => {
+    const { user } = await renderApp();
+
+    await user.keyboard("{Meta>}k{/Meta}");
+
+    expect(switcher()).toBeNull();
+  });
+
+  it("saves an edited title, and gives the focus back to its row after it closes", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk"]);
+    await user.click(screen.getByRole("button", { name: "Edit Milk" }));
+    await user.keyboard("{End} and honey");
+
+    await user.keyboard("{Control>}k{/Control}");
+    await user.keyboard("{Control>}k{/Control}");
+
+    expect(titles()).toEqual(["Milk and honey"]);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Edit Milk and honey" }),
+    );
+  });
+
+  it("does not open from an open menu", async () => {
+    const { user } = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "List actions" }));
+    await user.keyboard("{Control>}k{/Control}");
+
+    expect(switcher()).toBeNull();
+    expect(screen.getByRole("menu")).toBeDefined();
+  });
+});
