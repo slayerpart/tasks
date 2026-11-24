@@ -1,4 +1,4 @@
-/** Swipe right completes or uncompletes a task. Swipe left deletes it. */
+/** Swipe right completes a row, such as a task or all tasks of a list. Swipe left deletes it. */
 export type SwipeAction = "complete" | "delete";
 
 export const swipeConfig = {

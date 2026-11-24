@@ -722,3 +722,181 @@ describe("navigation", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Lists" })).toBeDefined();
   });
 });
+
+describe("lists screen", () => {
+  const actions = (title: string) => screen.getByRole("button", { name: `Actions for ${title}` });
+  const link = (title: string) => screen.getByRole("link", { name: title });
+
+  /** The lists in order, each with the number of its open tasks. */
+  function lists(): [string, string][] {
+    return within(screen.getByRole("list", { name: "Lists" }))
+      .getAllByRole("link")
+      .map((element) => {
+        const id = element.getAttribute("aria-describedby") ?? "";
+        return [element.textContent, document.getElementById(id)?.textContent ?? ""];
+      });
+  }
+
+  async function addLists(user: ReturnType<typeof userEvent.setup>, names: readonly string[]) {
+    await user.click(screen.getByRole("button", { name: "Add list" }));
+    for (const name of names) {
+      await user.keyboard(`${name}{Enter}`);
+    }
+    await user.keyboard("{Escape}");
+  }
+
+  /** Opens a list, adds tasks to it, and goes back to the lists screen. */
+  async function addTasksTo(
+    user: ReturnType<typeof userEvent.setup>,
+    title: string,
+    names: readonly string[],
+  ) {
+    await user.click(link(title));
+    await addTasks(user, names);
+    await user.click(screen.getByRole("link", { name: "Lists" }));
+    await screen.findByRole("heading", { level: 1, name: "Lists" });
+  }
+
+  it("adds lists at the top with the Add list button, one after another with Enter", async () => {
+    const { user } = await renderLists();
+
+    await addLists(user, ["Groceries", "Work"]);
+
+    expect(lists()).toEqual([
+      ["Groceries", "0 open tasks"],
+      ["Work", "0 open tasks"],
+      ["Tasks", "0 open tasks"],
+    ]);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText("Added “Work”").closest('[role="status"]')).not.toBeNull();
+  });
+
+  it("adds a list with N while the focus is in the screen", async () => {
+    const { user } = await renderLists();
+
+    await user.keyboard("n");
+
+    expect(screen.getByRole("textbox", { name: "New list" })).toBe(document.activeElement);
+  });
+
+  it("renames a list from its menu", async () => {
+    const { user } = await renderLists();
+
+    await user.click(actions("Tasks"));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await user.clear(screen.getByRole("textbox", { name: "List title" }));
+    await user.keyboard("Home{Enter}");
+
+    expect(lists()).toEqual([["Home", "0 open tasks"]]);
+    expect(document.activeElement).toBe(link("Home"));
+  });
+
+  it("completes all open tasks of a list, and Undo brings them back", async () => {
+    const { user } = await renderLists();
+    await addTasksTo(user, "Tasks", ["Milk", "Bread"]);
+
+    await user.click(actions("Tasks"));
+    await user.click(screen.getByRole("menuitem", { name: "Complete all" }));
+
+    expect(lists()).toEqual([["Tasks", "0 open tasks"]]);
+    expect(screen.getByText("Completed 2 tasks in “Tasks”")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(lists()).toEqual([["Tasks", "2 open tasks"]]);
+  });
+
+  it("disables Complete all for a list without open tasks", async () => {
+    const { user } = await renderLists();
+
+    await user.click(actions("Tasks"));
+
+    expect(
+      screen.getByRole("menuitem", { name: "Complete all" }).getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("deletes a list with Delete, moves the focus to the next list, and Undo restores it with its tasks", async () => {
+    const { user } = await renderLists();
+    await addTasksTo(user, "Tasks", ["Milk"]);
+    await addLists(user, ["Groceries"]);
+    link("Groceries").focus();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(link("Tasks"));
+
+    await user.keyboard("{Delete}");
+
+    await waitFor(() => {
+      expect(lists()).toEqual([["Groceries", "0 open tasks"]]);
+    });
+    expect(document.activeElement).toBe(link("Groceries"));
+    expect(screen.getByText("Deleted “Tasks”")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(lists()).toEqual([
+      ["Groceries", "0 open tasks"],
+      ["Tasks", "1 open task"],
+    ]);
+    expect(document.activeElement).toBe(link("Tasks"));
+  });
+
+  it("moves a list with Alt and the arrow keys, and tells screen readers about it", async () => {
+    const { user } = await renderLists();
+    await addLists(user, ["Groceries"]);
+    link("Groceries").focus();
+
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+
+    expect(lists().map(([title]) => title)).toEqual(["Tasks", "Groceries"]);
+    expect(document.activeElement).toBe(link("Groceries"));
+    expect(
+      screen.getByText("Groceries moved to place 2 of 2").closest('[role="status"]'),
+    ).not.toBeNull();
+  });
+
+  it("undoes the last change with Cmd+Z", async () => {
+    const { user } = await renderLists();
+    await addLists(user, ["Groceries"]);
+
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    await waitFor(() => {
+      expect(lists().map(([title]) => title)).toEqual(["Tasks"]);
+    });
+  });
+
+  it("returns the focus to the list after Escape on a new list or a rename", async () => {
+    const { user } = await renderLists();
+    link("Tasks").focus();
+
+    await user.keyboard("n");
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(link("Tasks"));
+
+    await user.click(actions("Tasks"));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(link("Tasks"));
+  });
+
+  it("keeps the focus in the screen after the last list is deleted, and tells how to add one", async () => {
+    const { user } = await renderLists();
+    link("Tasks").focus();
+
+    await user.keyboard("{Delete}");
+
+    await waitFor(() => {
+      expect(screen.queryAllByRole("link", { name: "Tasks" })).toEqual([]);
+    });
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Lists" }));
+    expect(
+      within(screen.getByRole("list", { name: "Tips" })).getByRole("listitem").textContent,
+    ).toBe("Click + or press N to add a list");
+  });
+
+  it("opens a list from its menu", async () => {
+    const { user } = await renderLists();
+
+    await user.click(actions("Tasks"));
+    await user.click(screen.getByRole("menuitem", { name: "Open" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
+  });
+});

@@ -58,7 +58,7 @@ interface PullOptions {
   readonly paused: boolean;
   /** Must add the new row in place of the add panel. */
   readonly onAdd: () => void;
-  /** Null when the list has no completed tasks to clear. */
+  /** Null when the screen has nothing to clear, such as completed tasks. */
   readonly onClear: (() => void) | null;
 }
 

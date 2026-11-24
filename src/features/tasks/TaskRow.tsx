@@ -10,10 +10,11 @@ import type { DisplayTask } from "../../model/selectors.ts";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { MoreIcon } from "../../ui/MoreIcon.tsx";
 import { rowSpring } from "../../ui/motion.ts";
-import styles from "./TaskListScreen.module.css";
-import { TitleInput, type CommitReason } from "./TitleInput.tsx";
-import { useLongPress, type PointerStart } from "./use-long-press.ts";
-import { useSwipe } from "./use-swipe.ts";
+import styles from "../rows/rows.module.css";
+import { TitleInput, type CommitReason } from "../rows/TitleInput.tsx";
+import { useLongPress, type PointerStart } from "../rows/use-long-press.ts";
+import { SwipeIcon } from "../rows/SwipeIcon.tsx";
+import { useSwipe } from "../rows/use-swipe.ts";
 
 export type RowControl = "check" | "title" | "menu" | "delete";
 
@@ -86,7 +87,7 @@ export function TaskRow({
       exit={{ opacity: 0, x: -48, transition: { duration: 0.18 } }}
       className={styles["row"]}
       data-kind={item.kind}
-      data-task-id={task.id}
+      data-row-id={task.id}
       inert={!present}
       data-armed={swipe.armed ?? undefined}
       data-dragging={dragging || undefined}
@@ -191,20 +192,5 @@ export function TaskRow({
         </span>
       </motion.div>
     </motion.li>
-  );
-}
-
-/** An icon on the track behind the row. A swipe reveals it. */
-function SwipeIcon({ side, path }: { side: "start" | "end"; path: string }) {
-  return (
-    <svg
-      className={styles["swipeIcon"]}
-      data-side={side}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d={path} />
-    </svg>
   );
 }

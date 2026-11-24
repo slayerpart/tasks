@@ -1,18 +1,26 @@
 import { useRef } from "react";
-import styles from "./TaskListScreen.module.css";
+import styles from "./rows.module.css";
 
 export type CommitReason = "enter" | "blur";
 
 interface TitleInputProps {
   readonly initialTitle: string;
   readonly label: string;
+  /** The label of the Enter key on a phone. "next" when Enter also opens a new row. */
+  readonly enterKeyHint?: "next" | "done";
   /** Gets the trimmed title, which can be empty. */
   readonly onCommit: (title: string, reason: CommitReason) => void;
   readonly onCancel: () => void;
 }
 
-/** A text field for a task title. Enter and blur commit, Escape cancels. */
-export function TitleInput({ initialTitle, label, onCommit, onCancel }: TitleInputProps) {
+/** A text field for the title of a task or a list. Enter and blur commit, Escape cancels. */
+export function TitleInput({
+  initialTitle,
+  label,
+  enterKeyHint = "next",
+  onCommit,
+  onCancel,
+}: TitleInputProps) {
   // Enter and Escape remove the field, and the browser then sends a blur. Only the first counts.
   const finished = useRef(false);
 
@@ -28,7 +36,7 @@ export function TitleInput({ initialTitle, label, onCommit, onCancel }: TitleInp
       className={styles["titleInput"]}
       aria-label={label}
       defaultValue={initialTitle}
-      enterKeyHint="next"
+      enterKeyHint={enterKeyHint}
       maxLength={500}
       autoFocus
       onKeyDown={(event) => {

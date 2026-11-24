@@ -5,38 +5,29 @@ import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import type { Sound } from "../../feedback/feedback.ts";
 import * as commands from "../../model/commands.ts";
-import { referencedIds, type Mutation } from "../../model/mutations.ts";
+import { referencedIds } from "../../model/mutations.ts";
 import { displayTasks, heatAt, openTasks, type DisplayTask } from "../../model/selectors.ts";
 import type { MutationId, TaskId, TaskList } from "../../model/types.ts";
-import { DraftRow } from "./DraftRow.tsx";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { MoreIcon } from "../../ui/MoreIcon.tsx";
 import { rowSpring } from "../../ui/motion.ts";
 import { useInputMode } from "../../ui/use-input-mode.ts";
-import { Hints } from "./Hints.tsx";
-import styles from "./TaskListScreen.module.css";
+import { DraftRow } from "../rows/DraftRow.tsx";
+import { fromPortal, isTyping } from "../rows/events.ts";
+import { Hints } from "../rows/Hints.tsx";
+import styles from "../rows/rows.module.css";
+import type { CommitReason } from "../rows/TitleInput.tsx";
+import { UndoToast, type Toast } from "../rows/UndoToast.tsx";
+import { undoSound } from "../rows/undo-sound.ts";
+import { useHoverInsert } from "../rows/use-hover-insert.ts";
+import { usePinchInsert } from "../rows/use-pinch-insert.ts";
+import { usePull } from "../rows/use-pull.ts";
+import { useReorder } from "../rows/use-reorder.ts";
+import { previewOrder } from "./preview-order.ts";
+import { hintsFor } from "./task-hints.ts";
 import { TaskRow, type RowControl } from "./TaskRow.tsx";
-import type { CommitReason } from "./TitleInput.tsx";
-import { UndoToast, type Toast } from "./UndoToast.tsx";
-import { previewOrder } from "./reorder.ts";
-import { useHoverInsert } from "./use-hover-insert.ts";
-import { usePinchInsert } from "./use-pinch-insert.ts";
-import { usePull } from "./use-pull.ts";
-import { useReorder } from "./use-reorder.ts";
 
 const context = commands.browserCommandContext;
-
-/** The sound for the change that an undo makes. Other undos give only a haptic tap. */
-const undoSounds = {
-  restoreTasks: "add",
-  deleteTask: "delete",
-  completeTask: "complete",
-  uncompleteTask: "uncomplete",
-} as const satisfies Partial<Record<Mutation["type"], Sound>>;
-
-function undoSound(type: Mutation["type"]): Sound | undefined {
-  return type in undoSounds ? undoSounds[type as keyof typeof undoSounds] : undefined;
-}
 
 interface Draft {
   readonly id: TaskId;
@@ -53,24 +44,6 @@ interface FocusRequest {
 
 function isRowControl(value: string | undefined): value is RowControl {
   return value === "check" || value === "title" || value === "menu" || value === "delete";
-}
-
-/** True when the user types into a field, so single-key shortcuts must not act. */
-/**
- * True for an event from a menu that renders outside the element in the page. React still
- * passes the event up through the element, which must not act on it.
- */
-function fromPortal(event: { readonly target: EventTarget; readonly currentTarget: Element }) {
-  return !(event.target instanceof Node && event.currentTarget.contains(event.target));
-}
-
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target instanceof HTMLInputElement
-      ? target.type !== "checkbox"
-      : target instanceof HTMLTextAreaElement || target.isContentEditable)
-  );
 }
 
 export function TaskListScreen({ list }: { list: TaskList }) {
@@ -101,7 +74,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   /** Tasks that replaced a draft row. They must not play the enter animation again. */
   const fromDraft = useRef(new Set<TaskId>());
 
-  const reorder = useReorder(listRef, openCount, (taskId, to) => {
+  const reorder = useReorder<TaskId>(listRef, openCount, (taskId, to) => {
     store.dispatch(commands.moveTask(state, context, taskId, to));
   });
   const reorderable = draft === null && editingId === null;
@@ -124,7 +97,9 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     reorder.drag === null
       ? storedItems
       : previewOrder(storedItems, reorder.drag.from, reorder.drag.to);
-  const hints = <Hints mode={inputMode} taskCount={items.length} adding={draft !== null} />;
+  const hints = (
+    <Hints mode={inputMode} hints={hintsFor(inputMode, items.length, draft !== null)} />
+  );
 
   const tabbableId = items.some((item) => item.task.id === activeId)
     ? activeId
@@ -135,7 +110,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     if (request === null) return;
     focusRequest.current = null;
     const target = listRef.current?.querySelector<HTMLElement>(
-      `[data-task-id="${request.taskId}"] [data-control="${request.control}"]`,
+      `[data-row-id="${request.taskId}"] [data-control="${request.control}"]`,
     );
     // A focus scrolls only to a row outside the viewport. The scroll padding also keeps a
     // row clear of the undo toast, and only `scrollIntoView` uses it.
@@ -281,7 +256,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
     const focusLeaves = clearing.taskIds.some(
       (taskId) =>
         listRef.current
-          ?.querySelector(`[data-task-id="${taskId}"]`)
+          ?.querySelector(`[data-row-id="${taskId}"]`)
           ?.contains(document.activeElement) === true,
     );
     store.dispatch(clearing);
@@ -458,7 +433,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       }}
       reorderable={reorderable && item.kind === "open" && pinch === null}
       pinchSide={pinch === null ? null : index < pinch.index ? "above" : "below"}
-      dragging={reorder.drag?.taskId === item.task.id}
+      dragging={reorder.drag?.id === item.task.id}
       dragY={reorder.dragY}
       onReorderStart={(pointer) => {
         reorder.start(item.task.id, index, pointer);
@@ -495,6 +470,8 @@ export function TaskListScreen({ list }: { list: TaskList }) {
             <DraftRow
               key={draft.id}
               id={draft.id}
+              label="New task"
+              checkable
               heat={heatAt(draft.index, openCount + 1)}
               skipEnterAnimation={draft.fromGesture}
               onCommit={(title, reason) => {

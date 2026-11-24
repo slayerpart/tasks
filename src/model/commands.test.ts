@@ -276,6 +276,16 @@ describe("list commands", () => {
     expect(visibleLists(state).map((list) => list.title)).toEqual(["Groceries", "Home", "Work"]);
   });
 
+  it("keeps the ID of a draft when it creates the list", () => {
+    const context = testContext();
+    const draftId = commands.newListId(context);
+
+    const mutation = commands.createList(emptyState, context, 0, "Groceries", draftId);
+
+    expect(mutation.listId).toBe(draftId);
+    expect(mutation.mutationId).not.toBe(draftId);
+  });
+
   it("counts the open tasks of each list and spreads the heat over the lists", () => {
     const context = testContext();
     const created = stateWithList(context);

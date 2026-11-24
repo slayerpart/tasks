@@ -1,20 +1,19 @@
 import { AnimatePresence, motion } from "motion/react";
-import { hintsFor, hintText, type InputMode } from "./task-hints.ts";
-import styles from "./TaskListScreen.module.css";
+import type { InputMode } from "../../ui/use-input-mode.ts";
+import { hintText, type Hint } from "./hint.ts";
+import styles from "./rows.module.css";
 
 interface HintsProps {
   readonly mode: InputMode;
-  readonly taskCount: number;
-  readonly adding: boolean;
+  readonly hints: readonly Hint[];
 }
 
 /**
- * Short help for an empty or short list. It matches the input that the device most likely
+ * Short help for an empty or short list of rows. It matches the input that the device most likely
  * uses. With a mouse, it sits below the list. On touch screens, it sits in the center of the
  * viewport.
  */
-export function Hints({ mode, taskCount, adding }: HintsProps) {
-  const hints = hintsFor(mode, taskCount, adding);
+export function Hints({ mode, hints }: HintsProps) {
   return (
     <ul className={styles["hints"]} data-mode={mode} aria-label="Tips">
       <AnimatePresence initial={false}>

@@ -3,7 +3,7 @@ export const pullConfig = {
   resistance: 0.4,
 } as const satisfies Record<string, number>;
 
-/** A pull down adds a task. A pull up at the end of the list clears the completed tasks. */
+/** A pull down adds a row. A pull up at the end of the rows clears them, such as completed tasks. */
 export type PullAction = "add" | "clear";
 
 /** The distance that arms each pull, in px. Null when the pull is not possible now. */
@@ -26,7 +26,7 @@ export function pullOffset(distance: number, threshold: number): number {
   return threshold + (distance - threshold) * pullConfig.resistance;
 }
 
-/** A release adds a task when the list has moved down by a full row. */
+/** A release adds a row when the list has moved down by a full row. */
 export function pullArmed(offset: number, threshold: number): boolean {
   return threshold > 0 && offset >= threshold;
 }

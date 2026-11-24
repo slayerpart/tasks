@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { hintsFor, hintText, hintsUntilTaskCount } from "./task-hints.ts";
+import { hintText } from "../rows/hint.ts";
+import { hintsFor, hintsUntilTaskCount } from "./task-hints.ts";
 
 const texts = (mode: "touch" | "pointer", taskCount: number, adding = false) =>
   hintsFor(mode, taskCount, adding).map(hintText);

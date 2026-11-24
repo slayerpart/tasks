@@ -1,4 +1,4 @@
-import { heatAt, type DisplayTask } from "../../model/selectors.ts";
+import { heatAt } from "../../model/selectors.ts";
 
 export const reorderConfig = {
   /** A touch that stays still this long picks a row up. */
@@ -11,36 +11,32 @@ export const reorderConfig = {
   maxScrollSpeed: 14,
 } as const satisfies Record<string, number>;
 
-/** The open-task index that a row dragged by `offset` px from `from` moves to. */
+/** The index that a row dragged by `offset` px from `from` moves to, among `count` rows. */
 export function reorderTarget(
   from: number,
   offset: number,
   rowHeight: number,
-  openCount: number,
+  count: number,
 ): number {
-  if (rowHeight <= 0 || openCount === 0) return from;
+  if (rowHeight <= 0 || count === 0) return from;
   const to = from + Math.round(offset / rowHeight);
-  return Math.min(Math.max(to, 0), openCount - 1);
+  return Math.min(Math.max(to, 0), count - 1);
 }
 
-/** The list as it looks while an open task moves from `from` to `to`. Heat follows position. */
-export function previewOrder(
-  items: readonly DisplayTask[],
+/**
+ * The rows as they look while the row at `from` moves to `to`. Heat follows position.
+ * It returns the same array when nothing moves.
+ */
+export function previewMove<Row extends { readonly heat: number }>(
+  rows: readonly Row[],
   from: number,
   to: number,
-): readonly DisplayTask[] {
-  const open = items.filter((item) => item.kind === "open");
-  const moved = open[from];
-  if (moved === undefined || from === to) return items;
-  const reordered = open.filter((_, index) => index !== from);
+): readonly Row[] {
+  const moved = rows[from];
+  if (moved === undefined || from === to) return rows;
+  const reordered = rows.filter((_, index) => index !== from);
   reordered.splice(to, 0, moved);
-  return [
-    ...reordered.map((item, index): DisplayTask => ({
-      ...item,
-      heat: heatAt(index, open.length),
-    })),
-    ...items.filter((item) => item.kind === "completed"),
-  ];
+  return reordered.map((row, index) => ({ ...row, heat: heatAt(index, rows.length) }));
 }
 
 /** Px per frame to scroll the page, negative upward, for a pointer at `clientY`. */

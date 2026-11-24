@@ -62,6 +62,7 @@
 }
 
 .headerActions {
+  grid-column: 2;
   display: flex;
 }
 
@@ -91,7 +92,7 @@
  */
 .pullArea {
   clip-path: inset(0 -100vw -100vh);
-  /* The tasks stay in front of the tips. */
+  /* The rows stay in front of the tips. */
   position: relative;
   z-index: 1;
 }
@@ -188,7 +189,7 @@
   translate: 0 calc(var(--pinch, 0px) * 0.5);
 }
 
-/* The new task between the spreading rows. It opens from its middle as the fingers spread. */
+/* The new row between the spreading rows. It opens from its middle as the fingers spread. */
 .pinchPanel {
   --row-surface: color-mix(
     in oklch,
@@ -305,6 +306,29 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   cursor: text;
+}
+
+/* A list title is a link that opens the list. No check box comes before it. */
+a.title {
+  padding-inline-start: 0.75rem;
+  text-decoration: none;
+  cursor: pointer;
+  /* iOS must not show a link preview on the long press that picks the row up. */
+  -webkit-touch-callout: none;
+}
+
+/* A list title field starts where the list title starts. */
+.rowContent > .titleInput:first-child {
+  padding-inline-start: 0.75rem;
+}
+
+/* The number of open tasks in a list. */
+.count {
+  flex: none;
+  padding-inline: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .row[data-kind="completed"] .title {
@@ -453,7 +477,7 @@
   }
 }
 
-/* The gap that opens between two tasks when the mouse rests on the line between them. */
+/* The gap that opens between two rows when the mouse rests on the line between them. */
 .insertGap {
   display: grid;
   place-items: center;
@@ -550,6 +574,12 @@
 
   .rowContent {
     padding-inline-start: 1rem;
+  }
+
+  /* The title starts where a task title starts, which has no check box on touch screens. */
+  a.title,
+  .rowContent > .titleInput:first-child {
+    padding-inline-start: 0.25rem;
   }
 }
 

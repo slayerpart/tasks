@@ -26,18 +26,27 @@ function existingTask(state: State, taskId: TaskId): Task {
   return task;
 }
 
-/** Creates a list at `index` among the visible lists. */
+/** Returns an ID for a list that the UI shows as a draft before it creates the list. */
+export function newListId(context: CommandContext): ListId {
+  return context.newId() as ListId;
+}
+
+/**
+ * Creates a list at `index` among the visible lists.
+ * Give `listId` to keep the ID of a draft.
+ */
 export function createList(
   state: State,
   context: CommandContext,
   index: number,
   title: string,
+  listId: ListId = newListId(context),
 ): MutationOf<"createList"> {
   const keys = visibleLists(state).map((list) => list.order);
   return {
     ...mutationBase(context),
     type: "createList",
-    listId: context.newId() as ListId,
+    listId,
     title,
     order: keyForIndex(keys, index),
   };

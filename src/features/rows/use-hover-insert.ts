@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "
 import { hoverGapAt, insertGapConfig, type RowBox } from "./insert-gap.ts";
 
 interface HoverInsert {
-  /** The index where a click in the open gap adds a task, or null when no gap is open. */
+  /** The index where a click in the open gap adds a row, or null when no gap is open. */
   readonly gap: number | null;
   readonly onPointerMove: (event: PointerEvent) => void;
   readonly onPointerLeave: () => void;
@@ -17,7 +17,7 @@ function openRowBoxes(list: HTMLElement): RowBox[] {
 }
 
 /**
- * Opens a gap between two open tasks when the mouse rests on the line between them. The gap
+ * Opens a gap between two open rows when the mouse rests on the line between them. The gap
  * stays open while the mouse is in it, and closes when the mouse leaves it.
  */
 export function useHoverInsert(

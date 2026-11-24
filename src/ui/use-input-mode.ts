@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from "react";
-import type { InputMode } from "../features/tasks/task-hints.ts";
 
 const touchQuery = "(hover: none) and (pointer: coarse)";
 
@@ -14,6 +13,9 @@ function subscribe(onChange: () => void): () => void {
     list?.removeEventListener("change", onChange);
   };
 }
+
+/** How the user most likely works: touch gestures, or a mouse and a keyboard. */
+export type InputMode = "touch" | "pointer";
 
 function getSnapshot(): InputMode {
   return query()?.matches === true ? "touch" : "pointer";

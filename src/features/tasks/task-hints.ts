@@ -1,9 +1,5 @@
-/** How the user most likely works: touch gestures, or a mouse and a keyboard. */
-export type InputMode = "touch" | "pointer";
-
-/** A hint is text with key names in it, for example ["Press ", { key: "N" }, " to add"]. */
-export type HintPart = string | { readonly key: string };
-export type Hint = readonly HintPart[];
+import type { InputMode } from "../../ui/use-input-mode.ts";
+import type { Hint } from "../rows/hint.ts";
 
 /** From this number of tasks, the user knows the app and the hints go away. */
 export const hintsUntilTaskCount = 3;
@@ -37,8 +33,4 @@ export function hintsFor(mode: InputMode, taskCount: number, adding: boolean): r
   if (taskCount >= hintsUntilTaskCount) return [];
   if (taskCount === 0) return adding ? [] : hints[mode].add;
   return hints[mode].manage;
-}
-
-export function hintText(hint: Hint): string {
-  return hint.map((part) => (typeof part === "string" ? part : part.key)).join("");
 }

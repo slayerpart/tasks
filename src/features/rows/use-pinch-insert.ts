@@ -6,9 +6,9 @@ import { rowSpring } from "../../ui/motion.ts";
 import { pinchArmed, pinchGapAt, type RowBox } from "./insert-gap.ts";
 
 export interface Pinch {
-  /** The index where a release adds a task. */
+  /** The index where a release adds a row. */
   readonly index: number;
-  /** The line between the two tasks, in px from the top of the list. */
+  /** The line between the two rows, in px from the top of the list. */
   readonly lineTop: number;
   readonly armed: boolean;
 }
@@ -30,7 +30,7 @@ function openRowBoxes(list: HTMLElement): RowBox[] {
 }
 
 /**
- * Two fingers that spread apart between two open tasks open a gap there. A release with the
+ * Two fingers that spread apart between two open rows open a gap there. A release with the
  * gap wide enough calls `onInsert` with the index, which must add the new row at once. The
  * spread goes into the `--pinch` property of `hostRef`, so rows move without a render.
  */
