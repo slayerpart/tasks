@@ -58,8 +58,20 @@ export function App() {
   const { state, saveFailed } = useAppSnapshot();
   const route = useRoute();
   const listId = route?.screen === "list" ? route.listId : null;
-  const stored = listId === null ? undefined : state.lists.get(listId);
-  const list = stored?.deletedAt === null ? stored : null;
+  const liveList = (id: ListId) => {
+    const stored = state.lists.get(id);
+    return stored?.deletedAt === null ? stored : null;
+  };
+  const routeList = listId === null ? null : liveList(listId);
+
+  // A list that the switcher created in place of another list. When undo deletes it, the
+  // user goes back to that other list, not to the lists screen.
+  const [created, setCreated] = useState<{ listId: ListId; from: ListId } | null>(null);
+  const origin =
+    routeList === null && created !== null && created.listId === listId
+      ? liveList(created.from)
+      : null;
+  const list = routeList ?? origin;
 
   // The last list that the user opened. The lists screen gives it the focus.
   const [lastListId, setLastListId] = useState<ListId | null>(null);
@@ -76,11 +88,13 @@ export function App() {
   }
 
   // An unknown path, or a list that does not exist (any more), shows the lists screen.
-  const known = route !== null && (listId === null || list !== null);
+  const known = route !== null && (listId === null || routeList !== null);
+  const originId = origin?.id ?? null;
   useEffect(() => {
     if (route === null) showLists();
+    else if (originId !== null) switchList(originId);
     else if (!known) goUp();
-  }, [route, known]);
+  }, [route, known, originId]);
 
   useEffect(() => {
     if (route !== null && known) rememberRoute(route);
@@ -114,6 +128,7 @@ export function App() {
       // A new list goes first, as from the lists screen. Undo deletes it again.
       const creation = commands.createList(state, commands.browserCommandContext, 0, choice.title);
       store.dispatch(creation);
+      setCreated(shownListId === null ? null : { listId: creation.listId, from: shownListId });
       feedback.sounds.play("add");
       feedback.haptics.tap();
       switchList(creation.listId);

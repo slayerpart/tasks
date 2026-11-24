@@ -1059,6 +1059,30 @@ describe("list switcher", () => {
     });
   });
 
+  it("goes back to the list that the user came from when undo deletes a created list", async () => {
+    const { store, user } = await renderApp();
+    const from = window.location.pathname;
+
+    await user.keyboard("{Control>}k{/Control}Trip{Enter}");
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: "Trip" })).toBeDefined();
+    });
+    await user.keyboard("{Meta>}z{/Meta}");
+
+    expect(visibleLists(store.getSnapshot().state).map((list) => list.title)).toEqual(["Tasks"]);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe(from);
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
+    // The lists screen is still below the list.
+    const popped = new Promise((resolve) => {
+      window.addEventListener("popstate", resolve, { once: true });
+    });
+    window.history.back();
+    await popped;
+    expect(window.location.pathname).toBe("/");
+  });
+
   it("closes with Cmd+K again, with the focus back where it was, and starts empty", async () => {
     const { user } = await renderApp();
     const region = screen.getByRole("region", { name: "Tasks" });
