@@ -20,7 +20,7 @@ import type { CommitReason } from "../rows/TitleInput.tsx";
 import { UndoToast, type Toast } from "../rows/UndoToast.tsx";
 import { undoSound } from "../rows/undo-sound.ts";
 import { useHoverInsert } from "../rows/use-hover-insert.ts";
-import { usePinchInsert } from "../rows/use-pinch-insert.ts";
+import { usePinch } from "../rows/use-pinch.ts";
 import { usePull } from "../rows/use-pull.ts";
 import { useReorder } from "../rows/use-reorder.ts";
 import { previewOrder } from "./preview-order.ts";
@@ -79,15 +79,16 @@ export function TaskListScreen({ list }: { list: TaskList }) {
   });
   const reorderable = draft === null && editingId === null;
   const inputMode = useInputMode();
-  const pinchInsert = usePinchInsert(
+  const pinchGesture = usePinch(
     pullContentRef,
     listRef,
     reorderable && reorder.drag === null,
     (index) => {
       startDraft(index, true);
     },
+    goUp,
   );
-  const pinch = pinchInsert.pinch;
+  const pinch = pinchGesture.pinch;
   const hoverInsert = useHoverInsert(
     listRef,
     reorderable && reorder.drag === null && inputMode === "pointer",
@@ -125,6 +126,10 @@ export function TaskListScreen({ list }: { list: TaskList }) {
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent): void {
+      // A screen that leaves is inert and takes no more shortcuts. The new screen has them.
+      // A check of the page, not of React state, so the leaving screen does not render again:
+      // a render would let Motion move its rows while the page scrolls for the new screen.
+      if (screenRef.current?.closest("[inert]") != null) return;
       if (
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
@@ -177,6 +182,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       startDraft(0, true);
     },
     onClear: completedCount > 0 && draft === null ? clearCompleted : null,
+    onUp: goUp,
   });
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
@@ -432,7 +438,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
         onRowKeyDown(event, item, index);
       }}
       reorderable={reorderable && item.kind === "open" && pinch === null}
-      pinchSide={pinch === null ? null : index < pinch.index ? "above" : "below"}
+      pinchSide={pinch?.kind !== "insert" ? null : index < pinch.index ? "above" : "below"}
       dragging={reorder.drag?.id === item.task.id}
       dragY={reorder.dragY}
       onReorderStart={(pointer) => {
@@ -493,14 +499,30 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       onKeyDown={(event) => {
         // A single-key shortcut works only while the focus is in the screen (WCAG 2.1.4).
         const plainKey = !event.altKey && !event.ctrlKey && !event.metaKey;
-        if (
-          plainKey &&
-          event.key.toLowerCase() === "n" &&
-          !fromPortal(event) &&
-          !isTyping(event.target)
-        ) {
+        if (!plainKey || event.defaultPrevented || fromPortal(event) || isTyping(event.target)) {
+          return;
+        }
+        if (event.key.toLowerCase() === "n") {
           event.preventDefault();
           startDraft(0);
+        } else if (event.key === "Escape") {
+          // A text field and a menu close themselves with Escape. Here, nothing else is open.
+          event.preventDefault();
+          goUp();
+        } else if (
+          (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+          event.target === event.currentTarget
+        ) {
+          // From the screen itself, as after it opens: the first or the last task.
+          const target = event.key === "ArrowDown" ? items[0] : items.at(-1);
+          if (target === undefined) return;
+          event.preventDefault();
+          // The row is on the screen already. Its focus makes it the active row.
+          const control = listRef.current?.querySelector<HTMLElement>(
+            `[data-row-id="${target.task.id}"] [data-control="title"]`,
+          );
+          control?.focus({ preventScroll: true });
+          control?.scrollIntoView({ block: "nearest" });
         }
       }}
       onPointerDown={(event) => {
@@ -573,7 +595,7 @@ export function TaskListScreen({ list }: { list: TaskList }) {
       </header>
       <div className={styles["pullArea"]}>
         <motion.div ref={pullContentRef} className={styles["pullContent"]} style={{ y: pull.y }}>
-          {pinch !== null && (
+          {pinch?.kind === "insert" && (
             // Touch only. A screen reader user adds a task with the "Add task" button.
             <div
               className={styles["pinchPanel"]}
@@ -588,17 +610,22 @@ export function TaskListScreen({ list }: { list: TaskList }) {
           <motion.div
             ref={pullPanelRef}
             className={styles["pullPanel"]}
-            data-armed={pull.armed === "add"}
+            data-armed={pull.armed === "add" || pull.armed === "up"}
+            data-stage={pull.armed === "up" ? "up" : undefined}
             style={{ rotateX: pull.panels.add.tilt, opacity: pull.panels.add.opacity }}
             aria-hidden="true"
           >
-            {pull.armed === "add" ? "Release to add" : "Pull to add a task"}
+            {pull.armed === "up"
+              ? "Release for lists"
+              : pull.armed === "add"
+                ? "Release to add"
+                : "Pull to add a task"}
           </motion.div>
           <ul
             ref={listRef}
             className={styles["list"]}
             aria-labelledby={headingId}
-            onPointerDown={pinchInsert.onPointerDown}
+            onPointerDown={pinchGesture.onPointerDown}
             onPointerMove={hoverInsert.onPointerMove}
             onPointerLeave={hoverInsert.onPointerLeave}
           >

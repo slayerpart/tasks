@@ -1,0 +1,74 @@
+/*
+ * The rows of a screen that unfolds. Each row has its own `--cascade-y` and `--cascade-delay`.
+ * The animations use `translate` and `opacity`, so the transforms of Motion stay free.
+ */
+.frame {
+  /*
+   * The app puts back the scroll position itself. Scroll anchoring of the browser would move
+   * it again while the screens change.
+   */
+  overflow-anchor: none;
+  position: relative;
+  /* The new screen is in front of the old one, which leaves behind it. */
+  z-index: 1;
+}
+
+.frame[data-phase="leave"] {
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes rowIn {
+  from {
+    translate: 0 var(--cascade-y, 0px);
+    opacity: 0;
+  }
+}
+
+@keyframes rowOut {
+  to {
+    translate: 0 var(--cascade-y, 0px);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
+.frame[data-phase="enter"] [data-row-id] {
+  animation: rowIn var(--transition-ms) cubic-bezier(0.2, 0.9, 0.25, 1) var(--cascade-delay, 0ms)
+    both;
+}
+
+/* Old rows fade early, so they are nearly gone when the new rows come in. */
+.frame[data-phase="leave"] [data-row-id] {
+  animation: rowOut var(--transition-ms) cubic-bezier(0.3, 0, 0.6, 1) var(--cascade-delay, 0ms) both;
+}
+
+/* The header, the hints and the free space come and go with the screen. */
+.frame[data-phase="enter"] :is(header, [aria-label="Tips"]) {
+  animation: fadeIn var(--transition-ms) ease-out var(--transition-delay, 0ms) both;
+}
+
+/* The old title is gone before the new title comes in at the same place. */
+.frame[data-phase="leave"] :is(header, [aria-label="Tips"], [data-toast]) {
+  animation: fadeOut 100ms ease-out both;
+}
+
+/* With reduced motion, the whole screen only fades. Rows do not move. */
+.frame[data-reduced][data-phase="enter"] {
+  animation: fadeIn var(--transition-ms) ease-out both;
+}
+
+.frame[data-reduced][data-phase="leave"] {
+  animation: fadeOut var(--transition-ms) ease-in both;
+}

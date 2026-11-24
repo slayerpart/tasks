@@ -1,5 +1,7 @@
 import { motion, useIsPresent, useReducedMotion } from "motion/react";
+import { use } from "react";
 import { rowSpring } from "../../ui/motion.ts";
+import { ScreenLeavingContext } from "../../ui/screen-leaving.ts";
 import styles from "./rows.module.css";
 import { TitleInput, type CommitReason } from "./TitleInput.tsx";
 
@@ -27,12 +29,13 @@ export function DraftRow({
   onCancel,
 }: DraftRowProps) {
   const reducedMotion = useReducedMotion();
+  const leaving = use(ScreenLeavingContext);
   // A row that leaves stays visible during its exit animation, but nobody can reach it.
   const present = useIsPresent();
   return (
     <motion.li
       // With reduced motion, rows jump to their place. No layout projection runs.
-      layout={reducedMotion === true ? false : "position"}
+      layout={reducedMotion === true || leaving ? false : "position"}
       transition={rowSpring}
       initial={skipEnterAnimation ? false : { opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}

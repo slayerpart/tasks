@@ -6,6 +6,7 @@ import { afterEach } from "vitest";
 MotionGlobalConfig.skipAnimations = true;
 // Without layout, jsdom has no scrolling either.
 Element.prototype.scrollIntoView = () => undefined;
+window.scrollTo = () => undefined;
 
 afterEach(() => {
   cleanup();

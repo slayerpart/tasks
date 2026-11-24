@@ -33,6 +33,10 @@ async function renderLists() {
 async function renderApp() {
   const rendered = await renderLists();
   await rendered.user.click(screen.getByRole("link", { name: "Tasks" }));
+  // The lists screen leaves one render after the list screen appears.
+  await waitFor(() => {
+    expect(screen.queryByRole("heading", { name: "Lists" })).toBeNull();
+  });
   return rendered;
 }
 
@@ -688,6 +692,42 @@ describe("navigation", () => {
     const link = screen.getByRole("link", { name: "Tasks" });
     expect(description(link)).toBe("2 open tasks");
     expect(document.activeElement).toBe(link);
+    expect(
+      screen.getByText("Lists", { selector: "span" }).closest('[role="status"]'),
+    ).not.toBeNull();
+  });
+
+  it("goes up with Escape, but Escape first closes a new task or a menu", async () => {
+    const { user } = await renderApp();
+
+    await user.keyboard("n");
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "List actions" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeDefined();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+    });
+    expect(document.activeElement).toBe(screen.getByRole("link", { name: "Tasks" }));
+  });
+
+  it("moves the focus from the opened list to its first or last task with the arrow keys", async () => {
+    const { user } = await renderApp();
+    await addTasks(user, ["Milk", "Bread", "Eggs"]);
+    screen.getByRole("region", { name: "Tasks" }).focus();
+
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Milk" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Bread" }));
+
+    screen.getByRole("region", { name: "Tasks" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit Eggs" }));
   });
 
   it("goes back to the lists screen with browser back", async () => {
@@ -889,6 +929,19 @@ describe("lists screen", () => {
     expect(
       within(screen.getByRole("list", { name: "Tips" })).getByRole("listitem").textContent,
     ).toBe("Click + or press N to add a list");
+  });
+
+  it("moves the focus from the screen to the first or last list with the arrow keys", async () => {
+    const { user } = await renderLists();
+    await addLists(user, ["Groceries"]);
+    screen.getByRole("region", { name: "Lists" }).focus();
+
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(link("Groceries"));
+
+    screen.getByRole("region", { name: "Lists" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(link("Tasks"));
   });
 
   it("opens a list from its menu", async () => {

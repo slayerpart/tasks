@@ -17,7 +17,7 @@ import {
 import { flushSync } from "react-dom";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import { rowSpring } from "../../ui/motion.ts";
-import { pullState, type PullAction } from "./pull.ts";
+import { pullConfig, pullState, type PullAction } from "./pull.ts";
 import { useClickGuard } from "./use-click-guard.ts";
 
 interface PanelMotion {
@@ -34,7 +34,8 @@ interface Pull {
   /** How far the list has moved. A negative value moves it up. */
   readonly y: MotionValue<number>;
   /** The add panel sits above the list. The clear panel sits below it. */
-  readonly panels: Readonly<Record<PullAction, PanelMotion>>;
+  /** The add panel also shows the pull that goes up. */
+  readonly panels: Readonly<Record<"add" | "clear", PanelMotion>>;
   readonly armed: PullAction | null;
   readonly onPointerDown: (event: PointerEvent) => void;
   /** Stops the click that a browser can send at the end of a pull. */
@@ -60,11 +61,13 @@ interface PullOptions {
   readonly onAdd: () => void;
   /** Null when the screen has nothing to clear, such as completed tasks. */
   readonly onClear: (() => void) | null;
+  /** Goes up to the lists screen after a pull far down. Null on a screen with nothing above. */
+  readonly onUp: (() => void) | null;
 }
 
 /**
  * Lets a touch or pen pull the list down at the top of the page, or up at the end of the
- * page. A release past the height of a panel calls its action.
+ * page. A release past the height of a panel calls its action. A pull far down goes up.
  */
 export function usePull({
   areaRef,
@@ -74,6 +77,7 @@ export function usePull({
   paused,
   onAdd,
   onClear,
+  onUp,
 }: PullOptions): Pull {
   const y = useMotionValue(0);
   const reducedMotion = useReducedMotion();
@@ -119,8 +123,10 @@ export function usePull({
         y.stop();
         start.current = y.get();
       }
+      const addHeight = addPanelRef.current?.offsetHeight ?? 0;
       const { offset, armed: next } = pullState(start.current + distance, {
-        add: startedAt.current.top ? (addPanelRef.current?.offsetHeight ?? 0) : null,
+        add: startedAt.current.top ? addHeight : null,
+        up: startedAt.current.top && onUp !== null ? addHeight * pullConfig.upRatio : null,
         clear: startedAt.current.bottom ? (clearPanelRef.current?.offsetHeight ?? 0) : null,
       });
       if (!last) {
@@ -132,6 +138,12 @@ export function usePull({
         return;
       }
       if (!tap) clickGuard.arm();
+      if (next === "up") {
+        // The screen leaves from where the pull holds it, with "Release for lists" still on
+        // its panel. It does not spring back first.
+        onUp?.();
+        return;
+      }
       setArmed(null);
       if (next === "add") {
         // The new row takes the place of the panel. The layout animation of the rows

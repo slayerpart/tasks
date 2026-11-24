@@ -5,12 +5,13 @@ import {
   useReducedMotion,
   type MotionValue,
 } from "motion/react";
-import { useRef, type KeyboardEvent } from "react";
+import { use, useRef, type KeyboardEvent } from "react";
 import { isPlainClick, routePath } from "../../app/router.ts";
 import type { DisplayList } from "../../model/selectors.ts";
 import { Menu, type MenuItem } from "../../ui/Menu.tsx";
 import { MoreIcon } from "../../ui/MoreIcon.tsx";
 import { rowSpring } from "../../ui/motion.ts";
+import { ScreenLeavingContext } from "../../ui/screen-leaving.ts";
 import styles from "../rows/rows.module.css";
 import { TitleInput, type CommitReason } from "../rows/TitleInput.tsx";
 import { useLongPress, type PointerStart } from "../rows/use-long-press.ts";
@@ -74,6 +75,7 @@ export function ListRow({
   const { list, heat, openCount } = item;
   const tabIndex = tabbable ? 0 : -1;
   const reducedMotion = useReducedMotion();
+  const leaving = use(ScreenLeavingContext);
   // A row that leaves stays visible during its exit animation, but nobody can reach it.
   const present = useIsPresent();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -88,7 +90,7 @@ export function ListRow({
     <motion.li
       // With reduced motion, rows jump to their place. No layout projection runs.
       // The dragged row follows the pointer, so it has no layout animation either.
-      layout={reducedMotion === true || dragging ? false : "position"}
+      layout={reducedMotion === true || dragging || leaving ? false : "position"}
       transition={rowSpring}
       initial={skipEnterAnimation ? false : { opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}

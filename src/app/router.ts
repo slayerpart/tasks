@@ -66,7 +66,28 @@ export function useRoute(): Route | null {
   return useMemo(() => parseRoute(pathname), [pathname]);
 }
 
+/** The history state of the lists screen: where the user had scrolled to. */
+interface ListsEntry {
+  readonly scrollY: number;
+}
+
+/** The scroll position that the lists screen had when the user left it, or 0. */
+export function savedListsScroll(): number {
+  const state: unknown = window.history.state;
+  return typeof state === "object" &&
+    state !== null &&
+    "scrollY" in state &&
+    typeof state.scrollY === "number"
+    ? state.scrollY
+    : 0;
+}
+
 export function openList(listId: ListId): void {
+  // The lists screen gets its scroll position back when the user comes back up.
+  if (parseRoute(window.location.pathname)?.screen === "lists") {
+    const lists: ListsEntry = { scrollY: window.scrollY };
+    window.history.replaceState(lists, "");
+  }
   const entry: ListEntry = { up: true };
   window.history.pushState(entry, "", routePath({ screen: "list", listId }));
   notify();
@@ -122,6 +143,8 @@ function lastScreen(): Route | null {
  * A list always gets the lists screen as the entry below it.
  */
 export function startRouting(): void {
+  // The app puts back the scroll position itself, after the screen has rendered.
+  window.history.scrollRestoration = "manual";
   const current = parseRoute(window.location.pathname);
   const route = current?.screen === "lists" ? lastScreen() : current;
   if (route?.screen !== "list" || isListEntry(window.history.state)) return;
