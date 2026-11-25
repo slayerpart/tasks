@@ -17,7 +17,11 @@ async function setup(): Promise<SyncHandlerOptions> {
   return {
     server: createPgSyncServer(await createTestDatabase()),
     authenticate: (request) =>
-      Promise.resolve(request.headers.get("Cookie") === "session=ok" ? userId : null),
+      Promise.resolve(
+        request.headers.get("Cookie") === "session=ok"
+          ? { userId, headers: new Headers({ "Set-Cookie": "session=refreshed" }) }
+          : null,
+      ),
   };
 }
 
@@ -58,6 +62,9 @@ describe("sync handlers", () => {
     expect(await pushed.json()).toEqual({ kind: "ok" });
     expect(pulled.status).toBe(200);
     expect(pulled.headers.get("Cache-Control")).toBe("no-store");
+    // A session that the check refreshed sends its new cookie.
+    expect(pushed.headers.getSetCookie()).toEqual(["session=refreshed"]);
+    expect(pulled.headers.getSetCookie()).toEqual(["session=refreshed"]);
     const body = (await pulled.json()) as { lastSeq: number; lists: { title: string }[] };
     expect(body.lastSeq).toBe(1);
     expect(body.lists.map((list) => list.title)).toEqual(["Groceries"]);

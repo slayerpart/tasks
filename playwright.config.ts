@@ -24,5 +24,7 @@ export default defineConfig({
     command: `pnpm build && pnpm preview --port ${String(port)} --strictPort`,
     port,
     reuseExistingServer: !isCi,
+    // The fake sign-in provider, so tests can sign in as any user.
+    env: { TASKS_MOCK_OAUTH: "1" },
   },
 });

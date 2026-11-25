@@ -1,10 +1,16 @@
 import type { SyncServer, UserId } from "../../src/sync/server-core.ts";
 import { parsePullRequest, parsePushRequest, type Parsed } from "./parse.ts";
 
+/** A checked session. `headers` go into the response, for example a refreshed cookie. */
+export interface SessionUser {
+  readonly userId: UserId;
+  readonly headers: Headers;
+}
+
 export interface SyncHandlerOptions {
   readonly server: SyncServer;
   /** The user of the session in the request, or null without a valid session. */
-  readonly authenticate: (request: Request) => Promise<UserId | null>;
+  readonly authenticate: (request: Request) => Promise<SessionUser | null>;
 }
 
 /** Larger bodies get 413. The client sends a long outbox in more than one push. */
@@ -44,11 +50,23 @@ async function respond<T>(
   }
 }
 
+/** Adds the cookies of the session to the response. */
+function withSession(response: Response, session: SessionUser): Response {
+  for (const cookie of session.headers.getSetCookie()) {
+    response.headers.append("Set-Cookie", cookie);
+  }
+  return response;
+}
+
 /** `POST /api/sync/push` with a JSON body. */
 export async function handlePush(request: Request, options: SyncHandlerOptions): Promise<Response> {
   if (request.method !== "POST") return error("methodNotAllowed");
-  const userId = await options.authenticate(request);
-  if (userId === null) return error("signInRequired");
+  const session = await options.authenticate(request);
+  if (session === null) return error("signInRequired");
+  return withSession(await push(request, session.userId, options.server), session);
+}
+
+async function push(request: Request, userId: UserId, server: SyncServer): Promise<Response> {
   // A form on another site cannot send JSON without a CORS preflight.
   const type = request.headers.get("Content-Type") ?? "";
   if (!/^application\/json\s*(;|$)/i.test(type)) return error("unsupportedMediaType");
@@ -62,14 +80,17 @@ export async function handlePush(request: Request, options: SyncHandlerOptions):
   } catch {
     return error("invalid", "The body is not JSON.");
   }
-  return respond(parsePushRequest(body), userId, (user, push) => options.server.push(user, push));
+  return respond(parsePushRequest(body), userId, (user, entries) => server.push(user, entries));
 }
 
 /** `GET /api/sync/pull?protocol=…&clientId=…&since=…` */
 export async function handlePull(request: Request, options: SyncHandlerOptions): Promise<Response> {
   if (request.method !== "GET") return error("methodNotAllowed");
-  const userId = await options.authenticate(request);
-  if (userId === null) return error("signInRequired");
+  const session = await options.authenticate(request);
+  if (session === null) return error("signInRequired");
   const query = new URL(request.url).searchParams;
-  return respond(parsePullRequest(query), userId, (user, pull) => options.server.pull(user, pull));
+  const response = await respond(parsePullRequest(query), session.userId, (user, pull) =>
+    options.server.pull(user, pull),
+  );
+  return withSession(response, session);
 }

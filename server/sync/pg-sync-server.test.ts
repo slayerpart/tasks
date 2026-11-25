@@ -9,7 +9,7 @@ import {
   type MemorySyncServer,
 } from "../../src/test/memory-sync-server.ts";
 import { actions, World } from "../../src/test/sync-world.ts";
-import { createTestDatabase } from "../db/test-database.ts";
+import { addTestUsers, createTestDatabase } from "../db/test-database.ts";
 import { createPgSyncServer } from "./pg-sync-server.ts";
 
 describeSyncServer("PgSyncServer", async () => createPgSyncServer(await createTestDatabase()));
@@ -50,7 +50,8 @@ describe("PgSyncServer", () => {
     const db = await createTestDatabase();
     await fc.assert(
       fc.asyncProperty(actions, async (run) => {
-        await db.execute(sql`truncate tasks, lists, sync_users, sync_clients`);
+        await db.execute(sql`truncate users cascade`);
+        await addTestUsers(db);
         const calls: Call[] = [];
         const world = new World(recordingServer(calls));
         for (const next of run) await world.run(next);

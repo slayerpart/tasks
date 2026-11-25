@@ -34,3 +34,6 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Local databases of the dev server
+.data/
