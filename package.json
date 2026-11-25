@@ -20,7 +20,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.2.0",
     "@use-gesture/react": "10.3.1",
+    "drizzle-orm": "0.45.4",
     "fractional-indexing": "4.0.0",
     "idb": "8.0.4",
     "motion": "14.14.0",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
+    "@electric-sql/pglite": "0.5.16",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.1",
     "@testing-library/react": "16.3.3",
@@ -38,6 +41,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
     "@vitest/browser-playwright": "5.1.0",
+    "drizzle-kit": "0.31.11",
     "eslint": "10.15.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "fast-check": "4.10.2",
