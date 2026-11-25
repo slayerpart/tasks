@@ -28,6 +28,16 @@ export interface AppStore {
    * It returns null when there is nothing to undo. The history lasts for the session.
    */
   readonly undo: (mutationId?: MutationId) => Undone | null;
+  /**
+   * Runs a task on the device data after all earlier saves and before later ones, for example
+   * a pull. `reload` shows the data of the device again, with the changes that still wait to
+   * be saved on top.
+   */
+  /** Calls the listener after each change of the user, also an undo. */
+  readonly onLocalChange: (listener: () => void) => () => void;
+  readonly exclusive: <T>(
+    task: (local: LocalStore, reload: () => Promise<void>) => Promise<T>,
+  ) => Promise<T>;
 }
 
 export interface Undone {
@@ -53,6 +63,9 @@ export async function openAppStore(
   let pending = 0;
   let failedSinceIdle = false;
   const history: HistoryEntry[] = [];
+  /** The changes that the user made and the device has not saved yet, oldest first. */
+  const unsaved: Mutation[] = [];
+  const changeListeners = new Set<() => void>();
 
   function publish(next: AppSnapshot): void {
     snapshot = next;
@@ -74,13 +87,23 @@ export async function openAppStore(
   function apply(mutation: Mutation): void {
     publish({ ...snapshot, state: applyMutation(snapshot.state, mutation) });
     pending++;
+    unsaved.push(mutation);
+    for (const listener of changeListeners) listener();
     queue = queue
       .then(() => local.commit(mutation))
       .catch((error: unknown) => {
         console.error("Could not save a change on this device.", error);
         failedSinceIdle = true;
       })
-      .then(settle);
+      .then(() => {
+        unsaved.shift();
+        return settle();
+      });
+  }
+
+  async function reload(): Promise<void> {
+    const saved = await local.load();
+    publish({ ...snapshot, state: unsaved.reduce(applyMutation, saved) });
   }
 
   const store: AppStore = {
@@ -105,6 +128,19 @@ export async function openAppStore(
       const inverse = { ...entry.inverse, ...mutationBase(context) };
       apply(inverse);
       return { mutationId: entry.mutationId, inverse };
+    },
+    onLocalChange: (listener) => {
+      changeListeners.add(listener);
+      return () => changeListeners.delete(listener);
+    },
+    exclusive: (task) => {
+      const run = queue.then(() => task(local, reload));
+      // A failed task must not stop the saves after it.
+      queue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
     },
   };
 

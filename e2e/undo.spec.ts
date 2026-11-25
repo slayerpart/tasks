@@ -31,8 +31,8 @@ async function expectTitles(page: Page, expected: readonly string[]): Promise<vo
     .toEqual(expected);
 }
 
-/** The titles of the tasks that IndexedDB has saved and not deleted. */
-function savedTitles(page: Page): Promise<string[]> {
+/** The types of the changes that the device has saved and not sent yet. */
+function savedChangeTypes(page: Page): Promise<string[]> {
   return page.evaluate(
     () =>
       new Promise<string[]>((resolve, reject) => {
@@ -41,11 +41,11 @@ function savedTitles(page: Page): Promise<string[]> {
           reject(open.error ?? new Error("Could not open the database."));
         };
         open.onsuccess = () => {
-          const request = open.result.transaction("tasks").objectStore("tasks").getAll();
+          const request = open.result.transaction("outbox").objectStore("outbox").getAll();
           request.onsuccess = () => {
-            const tasks = request.result as { title: string; deletedAt: string | null }[];
+            const changes = request.result as { type: string }[];
             open.result.close();
-            resolve(tasks.filter((task) => task.deletedAt === null).map((task) => task.title));
+            resolve(changes.map((change) => change.type));
           };
         };
       }),
@@ -89,8 +89,8 @@ test("the undo is saved on the device", async ({ page, hasTouch }) => {
   await undoButton(page).click();
   await expectTitles(page, ["Milk", "Bread", "Eggs"]);
 
-  // A reload can stop a save that is still running. Wait until the device has the task.
-  await expect.poll(() => savedTitles(page)).toContain("Bread");
+  // A reload can stop a save that is still running. Wait until the device has the undo.
+  await expect.poll(() => savedChangeTypes(page)).toContain("restoreTasks");
   await page.reload();
 
   await expectTitles(page, ["Milk", "Bread", "Eggs"]);

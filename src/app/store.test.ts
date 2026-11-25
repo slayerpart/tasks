@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import * as commands from "../model/commands.ts";
 import { openTasks, visibleLists } from "../model/selectors.ts";
+import type { State } from "../model/types.ts";
 import { createMemoryLocalStore } from "../test/memory-local-store.ts";
 import { openAppStore } from "./store.ts";
 
@@ -147,5 +148,55 @@ describe("undo", () => {
     const store = await openAppStore(createMemoryLocalStore());
 
     expect(store.undo()).toBeNull();
+  });
+
+  it("keeps a change that the user makes while a task on the device data runs", async () => {
+    const local = createMemoryLocalStore();
+    const store = await openAppStore(local);
+    const listId = visibleLists(store.getSnapshot().state)[0]?.id;
+    if (listId === undefined) throw new Error("Setup failed.");
+    let release: () => void = () => undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // As a pull does: the server confirms the list under another title.
+    const pull = store.exclusive(async (device, reload) => {
+      await blocked;
+      const confirmed = (await device.load()).lists.get(listId);
+      if (confirmed === undefined) throw new Error("Setup failed.");
+      await device.confirmPull(
+        0,
+        { kind: "ok", version: 1, lastSeq: 1, lists: [{ ...confirmed, title: "Home" }], tasks: [] },
+        "user-a",
+      );
+      await reload();
+    });
+
+    store.dispatch(commands.createTask(store.getSnapshot().state, context, listId, 0, "Milk"));
+    release();
+    await pull;
+
+    const titles = (state: State) => [
+      visibleLists(state).map((list) => list.title),
+      openTasks(state, listId).map((task) => task.title),
+    ];
+    expect(titles(store.getSnapshot().state)).toEqual([["Home"], ["Milk"]]);
+    await store.idle();
+    expect(titles(await local.load())).toEqual([["Home"], ["Milk"]]);
+  });
+
+  it("goes on saving after a task on the device data fails", async () => {
+    const local = createMemoryLocalStore();
+    const store = await openAppStore(local);
+    const listId = visibleLists(store.getSnapshot().state)[0]?.id;
+    if (listId === undefined) throw new Error("Setup failed.");
+
+    await expect(
+      store.exclusive(() => Promise.reject(new Error("The test made this task fail."))),
+    ).rejects.toThrow();
+    store.dispatch(commands.renameList(context, listId, "Home"));
+    await store.idle();
+
+    expect(visibleLists(await local.load()).map((list) => list.title)).toEqual(["Home"]);
   });
 });
