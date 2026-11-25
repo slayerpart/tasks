@@ -1,5 +1,5 @@
 declare const brand: unique symbol;
-type Brand<T, Name extends string> = T & { readonly [brand]: Name };
+export type Brand<T, Name extends string> = T & { readonly [brand]: Name };
 
 export type ListId = Brand<string, "ListId">;
 export type TaskId = Brand<string, "TaskId">;
