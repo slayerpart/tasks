@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./account.ts";
 import { transitionDone } from "./app.ts";
 import { pull } from "./gestures.ts";
 
@@ -55,14 +56,6 @@ async function noViolations(page: Page): Promise<void> {
   await page.waitForFunction(() => document.getAnimations().length === 0);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
-}
-
-/** Signs in from the settings, through the pages of the mock provider. */
-async function signIn(page: Page, email: string): Promise<void> {
-  await page.getByRole("button", { name: "Continue with Mock", exact: true }).click();
-  await page.getByRole("textbox", { name: "Email" }).fill(email);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText(`Signed in as ${email}`, { exact: true })).toBeVisible();
 }
 
 /** A device with the data of one account, and a session of another account. */

@@ -1,13 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-/** Signs in from the settings, through the pages of the mock provider. */
-async function signIn(page: Page, email: string): Promise<void> {
-  await page.goto("/settings");
-  await page.getByRole("button", { name: "Continue with Mock", exact: true }).click();
-  await page.getByRole("textbox", { name: "Email" }).fill(email);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
-}
+import { signIn } from "./account.ts";
 
 function sessionEmail(page: Page): Promise<string | null> {
   return page.evaluate(async () => {
@@ -20,6 +12,7 @@ function sessionEmail(page: Page): Promise<string | null> {
 test("signs in through the provider and keeps the session in an httpOnly cookie", async ({
   page,
 }) => {
+  await page.goto("/settings");
   await signIn(page, "ada@example.com");
 
   expect(await sessionEmail(page)).toBe("ada@example.com");
@@ -28,6 +21,7 @@ test("signs in through the provider and keeps the session in an httpOnly cookie"
 });
 
 test("syncs the lists of the device after the sign-in", async ({ page }) => {
+  await page.goto("/settings");
   await signIn(page, "linus@example.com");
 
   await expect(page.getByText("Synced")).toBeVisible();
@@ -49,6 +43,7 @@ test("tells about a sign-in that the user cancels at the provider", async ({ pag
 });
 
 test("signs out, and the device starts again without data", async ({ page }) => {
+  await page.goto("/settings");
   await signIn(page, "grace@example.com");
   await expect(page.getByText("Synced")).toBeVisible();
 
