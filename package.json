@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:vercel": "vite build && node server/production/build-output.ts",
+    "build:vercel": "vite build && node server/production/build-output.ts && node server/db/migrate.ts",
     "db:migrate": "node server/db/migrate.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b",

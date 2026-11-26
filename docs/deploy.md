@@ -14,7 +14,9 @@ Then `server/production/build-output.ts` writes the [Vercel Build Output](https:
   It is one bundled file, so it needs no `node_modules`.
 - `config.json` has the routes and the security headers.
 
-Vercel uses this folder as it is.
+On a production build, `server/db/migrate.ts` then applies the new migrations to the database (step 2).
+
+Vercel uses `.vercel/output` as it is.
 `vercel.json` only tells Vercel which commands to run.
 
 ## 1. Neon
@@ -23,22 +25,29 @@ Vercel uses this folder as it is.
 2. Open **Connect** on the project page.
 3. Copy the connection string **with** connection pooling.
    This is `DATABASE_URL` for Vercel.
-4. Copy the connection string **without** connection pooling.
-   You use it only for the migrations.
 
 ## 2. Migrations
 
-Run the migrations before each deploy that adds a migration in `server/db/migrations`.
-The deploy does not run them, so a preview build never changes the production database.
+You do not run the migrations by hand.
+The last step of a production build applies the new migrations in `server/db/migrations` to the database of `DATABASE_URL`.
+Each migration runs one time only.
+The build log then shows "The database is up to date."
+
+A preview build skips this step and shows "No migrations on a preview build.", so it never changes the production database.
+
+If a migration fails, the build fails and Vercel does not deploy it.
+The old version stays live.
+The build log shows the error of the database.
+
+The new tables and columns are in the database a short time before the new code is live.
+So a new migration must also work with the old code.
+Add tables and columns, but do not rename or remove them in the same deploy.
+
+To run the migrations from your computer, for example on another database:
 
 ```sh
-DATABASE_URL='<connection string without pooling>' pnpm db:migrate
+DATABASE_URL='<connection string>' pnpm db:migrate
 ```
-
-The command writes "The database is up to date." when it is done.
-Each migration runs one time only, so you can run the command again safely.
-
-A new migration must work with the code that is live now, because the old code runs until the deploy is done.
 
 ## 3. Vercel project and domain
 
@@ -111,8 +120,8 @@ After a 429, the app shows an error and tries again later, with a longer wait ea
 
 ## 8. Deploy
 
-1. Run the migrations (step 2).
-2. Push to the production branch, or run **Redeploy** in Vercel.
+Push to the production branch, or run **Redeploy** in Vercel.
+The build applies the migrations (step 2).
 
 ## 9. Check the deploy
 
