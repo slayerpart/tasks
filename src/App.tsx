@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
@@ -208,6 +209,7 @@ export function App() {
         </p>
         <SyncStatusBar onSignIn={openSettings} onSettingsScreen={screen.screen === "settings"} />
       </main>
+      <Analytics />
     </MotionConfig>
   );
 }
