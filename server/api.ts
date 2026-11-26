@@ -6,7 +6,7 @@ import { handlePull, handlePush, type SyncHandlerOptions } from "./sync/handlers
  * All endpoints under `/api`. It returns null for other paths, so the static app can answer
  * them.
  */
-export function createApi(auth: Auth, server: SyncServer) {
+export function createApi(auth: Auth, server: SyncServer, providers: readonly string[]) {
   const sync: SyncHandlerOptions = {
     server,
     authenticate: (request) => authenticate(auth, request),
@@ -14,6 +14,10 @@ export function createApi(auth: Auth, server: SyncServer) {
   return async (request: Request): Promise<Response | null> => {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith("/api/auth/")) return auth.handler(request);
+    if (pathname === "/api/providers") {
+      // The configuration can change with each deploy, so the app asks for it each time.
+      return Response.json({ providers }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (pathname === "/api/sync/push") return handlePush(request, sync);
     if (pathname === "/api/sync/pull") return handlePull(request, sync);
     if (pathname === "/api" || pathname.startsWith("/api/")) {

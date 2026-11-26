@@ -5,13 +5,19 @@ import { randomUuid } from "../model/uuid.ts";
 import { localState } from "../sync/client-core.ts";
 import type { ClientId, OutboxEntry, PullChanges } from "../sync/protocol.ts";
 
+/** The account that the data of a device belongs to. */
+export interface SyncAccount {
+  readonly id: string;
+  readonly email: string;
+}
+
 /** The sync data of the device, apart from the rows. */
 export interface SyncMeta {
   readonly clientId: ClientId;
   /** The server version of the confirmed rows. */
   readonly version: number;
   /** The account that the confirmed rows and the outbox belong to. Null before the first sync. */
-  readonly accountId: string | null;
+  readonly account: SyncAccount | null;
 }
 
 interface LocalDbSchema extends DBSchema {
@@ -26,8 +32,9 @@ interface LocalDbSchema extends DBSchema {
 /**
  * - 1: `lists` and `tasks` held the rows with all changes applied.
  * - 2: they hold the confirmed rows, and the changes in the outbox go on top.
+ * - 3: the meta holds the account with its email, in place of `accountId`.
  */
-const schemaVersion = 2;
+const schemaVersion = 3;
 
 /** All that the sync engine needs from the device. */
 export interface StoredSync extends SyncMeta {
@@ -48,7 +55,7 @@ export interface LocalStore {
    * transaction. It does nothing and returns false when the pull asked for changes after
    * another version than the stored one.
    */
-  confirmPull(since: number, pull: PullChanges, accountId: string): Promise<boolean>;
+  confirmPull(since: number, pull: PullChanges, account: SyncAccount): Promise<boolean>;
   /** Removes these changes from the outbox, so they never reach the server. */
   dropPending(seqs: readonly number[]): Promise<void>;
   /** Deletes all data. The device then gets a new client ID, as a new device. */
@@ -57,7 +64,7 @@ export interface LocalStore {
 }
 
 function newMeta(): SyncMeta {
-  return { clientId: randomUuid() as ClientId, version: 0, accountId: null };
+  return { clientId: randomUuid() as ClientId, version: 0, account: null };
 }
 
 export async function openLocalStore(name: string): Promise<LocalStore> {
@@ -77,6 +84,19 @@ export async function openLocalStore(name: string): Promise<LocalStore> {
         }
         database.createObjectStore("meta");
         void transaction.objectStore("meta").put(newMeta(), "sync");
+      } else if (oldVersion < 3) {
+        // No version 2 device ever synced: its `accountId` is always null. Keep its client ID.
+        const meta = transaction.objectStore("meta");
+        void meta
+          .get("sync")
+          .then((old) =>
+            meta.put(
+              old === undefined
+                ? newMeta()
+                : { clientId: old.clientId, version: old.version, account: null },
+              "sync",
+            ),
+          );
       }
     },
   });
@@ -90,7 +110,7 @@ export async function openLocalStore(name: string): Promise<LocalStore> {
     },
     pendingMutations: () => pendingMutations(db),
     loadSync: () => loadSync(db),
-    confirmPull: (since, pull, accountId) => confirmPull(db, since, pull, accountId),
+    confirmPull: (since, pull, account) => confirmPull(db, since, pull, account),
     dropPending: async (seqs) => {
       const tx = db.transaction("outbox", "readwrite");
       await Promise.all([...seqs.map((seq) => tx.store.delete(seq)), tx.done]);
@@ -151,7 +171,7 @@ async function confirmPull(
   db: IDBPDatabase<LocalDbSchema>,
   since: number,
   pull: PullChanges,
-  accountId: string,
+  account: SyncAccount,
 ): Promise<boolean> {
   const tx = db.transaction(["lists", "tasks", "outbox", "meta"], "readwrite");
   const metaStore = tx.objectStore("meta");
@@ -167,7 +187,10 @@ async function confirmPull(
     ...pull.lists.map((list) => listStore.put(list)),
     ...pull.tasks.map((task) => taskStore.put(task)),
     tx.objectStore("outbox").delete(IDBKeyRange.upperBound(pull.lastSeq)),
-    metaStore.put({ ...meta, version: pull.version, accountId }, "sync"),
+    metaStore.put(
+      { ...meta, version: pull.version, account: { id: account.id, email: account.email } },
+      "sync",
+    ),
     tx.done,
   ]);
   return true;

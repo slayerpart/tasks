@@ -7,6 +7,8 @@ import { StoreProvider } from "./app/store-context.tsx";
 import { FeedbackProvider } from "./feedback/feedback-context.tsx";
 import * as commands from "./model/commands.ts";
 import { visibleLists } from "./model/selectors.ts";
+import { SyncProvider } from "./sync/sync-context.tsx";
+import { createFakeSync } from "./test/fake-sync.ts";
 import { createMemoryLocalStore } from "./test/memory-local-store.ts";
 import { createRecordingFeedback } from "./test/recording-feedback.ts";
 
@@ -19,14 +21,17 @@ async function renderLists() {
       if (vi.isFakeTimers()) vi.advanceTimersByTime(ms);
     },
   });
+  const sync = createFakeSync();
   render(
     <StoreProvider store={store}>
       <FeedbackProvider feedback={feedback}>
-        <App />
+        <SyncProvider engine={sync.engine} account={sync.account}>
+          <App />
+        </SyncProvider>
       </FeedbackProvider>
     </StoreProvider>,
   );
-  return { store, user, feedback: events };
+  return { store, user, feedback: events, sync };
 }
 
 /** Renders the app and opens the first list, which every new device has. */

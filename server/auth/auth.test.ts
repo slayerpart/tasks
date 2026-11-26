@@ -203,6 +203,14 @@ describe("sign-in", () => {
     expect(await browser.userId()).not.toBeNull();
   });
 
+  it("tells the app the providers to sign in with", async () => {
+    const browser = new Browser(await startServer());
+
+    expect(await (await browser.fetch("/api/providers")).json()).toEqual({
+      providers: ["mock", "mock-b"],
+    });
+  });
+
   it("answers unknown API paths with 404", async () => {
     const browser = new Browser(await startServer());
 

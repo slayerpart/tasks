@@ -82,17 +82,6 @@ test.describe("on touch", () => {
     await expect(page.getByRole("heading", listsHeading)).toBeVisible();
     await expect(groceries).toBeVisible();
   });
-
-  test("a pull far down on the lists screen adds a list, because nothing is above it", async ({
-    page,
-  }) => {
-    await page.getByRole("link", { name: "Lists" }).click();
-    await expect(page.getByRole("heading", listsHeading)).toBeVisible();
-
-    await pull(page.getByRole("link", { name: "Tasks", exact: true }), 260);
-
-    await expect(page.getByRole("textbox", { name: "New list" })).toBeFocused();
-  });
 });
 
 test("Escape goes up, with the focus on the list", async ({ page, hasTouch }) => {

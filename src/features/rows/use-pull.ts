@@ -61,7 +61,7 @@ interface PullOptions {
   readonly onAdd: () => void;
   /** Null when the screen has nothing to clear, such as completed tasks. */
   readonly onClear: (() => void) | null;
-  /** Goes up to the lists screen after a pull far down. Null on a screen with nothing above. */
+  /** Goes up a level after a pull far down. Null on a screen with nothing above. */
   readonly onUp: (() => void) | null;
 }
 

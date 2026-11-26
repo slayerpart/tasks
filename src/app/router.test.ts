@@ -10,6 +10,7 @@ async function back(): Promise<void> {
 import type { ListId } from "../model/types.ts";
 import {
   openList,
+  openSettings,
   parseRoute,
   rememberRoute,
   routePath,
@@ -25,6 +26,7 @@ describe("routes", () => {
       { screen: "lists" },
       { screen: "list", listId },
       { screen: "list", listId: "with space/and slash" as ListId },
+      { screen: "settings" },
     ] as const) {
       expect(parseRoute(routePath(route))).toEqual(route);
     }
@@ -69,6 +71,43 @@ describe("startRouting", () => {
     startRouting();
 
     expect(window.location.pathname).toBe("/lists/a1b2-c3");
+    await back();
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("puts the lists screen below the settings, and keeps the query of a sign-in", async () => {
+    window.history.replaceState(null, "", "/outside");
+    window.history.pushState(null, "", "/settings?error=access_denied");
+
+    startRouting();
+
+    expect(window.location.pathname + window.location.search).toBe("/settings?error=access_denied");
+    await back();
+    expect(window.location.pathname).toBe("/");
+  });
+});
+
+describe("openSettings", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens the settings above the lists screen, so back goes to the lists screen", async () => {
+    openSettings();
+
+    expect(window.location.pathname).toBe("/settings");
+    await back();
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("takes the place of a list, so back still goes to the lists screen", async () => {
+    openList(listId);
+    const length = window.history.length;
+
+    openSettings();
+
+    expect(window.location.pathname).toBe("/settings");
+    expect(window.history.length).toBe(length);
     await back();
     expect(window.location.pathname).toBe("/");
   });

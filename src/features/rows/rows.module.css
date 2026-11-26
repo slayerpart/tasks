@@ -88,6 +88,12 @@
   cursor: pointer;
 }
 
+/* The way up to the settings, at the place of the way back on a list. */
+.settingsLink {
+  composes: add;
+  justify-self: start;
+}
+
 @media (hover: hover) {
   .add:hover {
     background: color-mix(in oklch, currentColor 10%, transparent);

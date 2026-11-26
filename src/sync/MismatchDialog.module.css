@@ -1,0 +1,11 @@
+.text {
+  margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: grid;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+}

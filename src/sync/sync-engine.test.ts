@@ -125,6 +125,7 @@ describe("sync engine", () => {
 
     expect(phone.engine.getStatus()).toEqual({ kind: "signInRequired", pending: 1 });
     expect(phone.engine.getUser()).toBeNull();
+    expect(phone.engine.getAccount()).toBeNull();
   });
 
   it("sends the lists of a new device to an empty account", async () => {
@@ -135,8 +136,12 @@ describe("sync engine", () => {
 
     expect(phone.engine.getStatus()).toEqual({ kind: "synced", at: 0 });
     expect(phone.engine.getUser()).toEqual(ada);
+    expect(phone.engine.getAccount()).toEqual({ id: ada.id, email: ada.email });
     expect(listTitles(server.stateOf(ada.id as UserId))).toEqual(["Tasks"]);
-    expect(await phone.local.loadSync()).toMatchObject({ accountId: ada.id, outbox: [] });
+    expect(await phone.local.loadSync()).toMatchObject({
+      account: { id: ada.id, email: ada.email },
+      outbox: [],
+    });
   });
 
   it("drops the untouched first list of a new device when the account has lists", async () => {
@@ -202,6 +207,35 @@ describe("sync engine", () => {
     expect(network.pushes).toBe(pushes);
     expect(listTitles(server.stateOf(grace.id as UserId))).toEqual([]);
     expect(listTitles(phone.store.getSnapshot().state)).toEqual(["Ada's"]);
+  });
+
+  it("keeps a state that needs the user while it syncs again", async () => {
+    const { device: newDevice } = setup();
+    const phone = await newDevice(ada);
+    await phone.engine.syncNow();
+    phone.user = grace;
+    await phone.engine.syncNow();
+    const kinds: string[] = [];
+    phone.engine.subscribe(() => kinds.push(phone.engine.getStatus().kind));
+
+    await phone.engine.syncNow();
+
+    expect(kinds.every((kind) => kind === "accountMismatch")).toBe(true);
+  });
+
+  it("stops for good, after the sync that runs", async () => {
+    const { network, device: newDevice } = setup();
+    const phone = await newDevice(ada);
+
+    const running = phone.engine.syncNow();
+    await phone.engine.stop();
+    const pushes = network.pushes;
+    phone.store.dispatch(commands.renameList(testContext("p"), firstListId(phone.store), "Home"));
+    await phone.engine.syncNow();
+    await running;
+
+    expect(pushes).toBe(1);
+    expect(network.pushes).toBe(1);
   });
 
   it("goes offline, retries with growing delays, and recovers", async () => {

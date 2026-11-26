@@ -1,9 +1,9 @@
-/* The toast floats above the list, at the bottom of the screen. */
+/* The toast floats above the list, at the bottom of the screen, and above the sync status bar. */
 .region {
   position: fixed;
   z-index: 2;
   inset-inline: 0;
-  inset-block-end: calc(1rem + env(safe-area-inset-bottom));
+  inset-block-end: calc(1rem + var(--status-bar-size, env(safe-area-inset-bottom)));
   display: flex;
   justify-content: center;
   padding-inline: 1rem;

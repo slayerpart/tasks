@@ -1,5 +1,5 @@
 import { createApi } from "../api.ts";
-import { createAuth, type OAuthClient } from "../auth/auth.ts";
+import { createAuth, providerIds, type AuthOptions, type OAuthClient } from "../auth/auth.ts";
 import type { Database } from "../db/database.ts";
 import { createPgSyncServer } from "../sync/pg-sync-server.ts";
 import { createMockOAuth, mockProviders } from "./mock-oauth.ts";
@@ -21,7 +21,7 @@ export interface LocalServerOptions {
 /** The API, and the mock provider when it is on, for one origin. */
 export function createLocalServer(options: LocalServerOptions): WebHandler {
   const { db, origin, mockOAuth, google, github } = options;
-  const auth = createAuth({
+  const authOptions: AuthOptions = {
     db,
     baseURL: origin,
     secret: localSecret,
@@ -29,8 +29,8 @@ export function createLocalServer(options: LocalServerOptions): WebHandler {
     ...(google === undefined ? {} : { google }),
     ...(github === undefined ? {} : { github }),
     ...(mockOAuth ? { testProviders: mockProviders(origin) } : {}),
-  });
-  const api = createApi(auth, createPgSyncServer(db));
+  };
+  const api = createApi(createAuth(authOptions), createPgSyncServer(db), providerIds(authOptions));
   const mock = mockOAuth ? createMockOAuth() : null;
   return async (request) => (await mock?.(request)) ?? api(request);
 }

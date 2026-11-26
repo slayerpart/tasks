@@ -25,3 +25,16 @@ HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
   this.open = false;
   this.dispatchEvent(new Event("close"));
 };
+
+// jsdom has no layout, so nothing ever resizes. E2E tests cover the real sizes.
+globalThis.ResizeObserver = class {
+  observe(): void {
+    // No layout, no sizes.
+  }
+  unobserve(): void {
+    // No layout, no sizes.
+  }
+  disconnect(): void {
+    // No layout, no sizes.
+  }
+};

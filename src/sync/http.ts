@@ -95,3 +95,60 @@ export function createHttpTransport(fetcher: Fetch = (input, init) => fetch(inpu
     },
   } as const satisfies SyncTransport;
 }
+
+/** The requests of the account section of the settings. */
+export interface AccountTransport {
+  /** The IDs of the providers that the server offers, such as "google". */
+  providers(): Promise<ServerResult<readonly string[]>>;
+  /**
+   * Starts a sign-in with a provider. It returns the page of the provider. After the sign-in,
+   * the provider sends the browser back to `returnPath`, with `?error=` when it failed.
+   */
+  startSignIn(provider: string, returnPath: string): Promise<ServerResult<string>>;
+  signOut(): Promise<ServerResult<null>>;
+  /** Ends all sessions of the user, on all devices. */
+  signOutEverywhere(): Promise<ServerResult<null>>;
+}
+
+function postJson(fetcher: Fetch, path: string, body: unknown) {
+  return send(fetcher, path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function createAccountTransport(fetcher: Fetch = (input, init) => fetch(input, init)) {
+  return {
+    async providers() {
+      const result = await read<unknown>(await send(fetcher, "/api/providers"));
+      if (result.kind !== "ok") return result;
+      const body = result.value;
+      const ids =
+        typeof body === "object" && body !== null && "providers" in body
+          ? body.providers
+          : undefined;
+      return Array.isArray(ids) && ids.every((id) => typeof id === "string")
+        ? { kind: "ok", value: ids }
+        : { kind: "error", status: 200, message: "The server sent no list of providers." };
+    },
+    async startSignIn(provider, returnPath) {
+      const result = await read<{ url: string }>(
+        await postJson(fetcher, "/api/auth/sign-in/social", {
+          provider,
+          callbackURL: returnPath,
+          errorCallbackURL: returnPath,
+        }),
+      );
+      return result.kind === "ok" ? { kind: "ok", value: result.value.url } : result;
+    },
+    async signOut() {
+      const result = await read(await postJson(fetcher, "/api/auth/sign-out", {}));
+      return result.kind === "ok" ? { kind: "ok", value: null } : result;
+    },
+    async signOutEverywhere() {
+      const result = await read(await postJson(fetcher, "/api/auth/revoke-sessions", {}));
+      return result.kind === "ok" ? { kind: "ok", value: null } : result;
+    },
+  } as const satisfies AccountTransport;
+}

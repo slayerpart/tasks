@@ -1,23 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * The app has no sign-in button yet, so these tests start the sign-in as the app will: with a
- * POST from the page. Everything after it is real browser navigation.
- */
+/** Signs in from the settings, through the pages of the mock provider. */
 async function signIn(page: Page, email: string): Promise<void> {
-  await page.goto("/");
-  const url = await page.evaluate(async () => {
-    const response = await fetch("/api/auth/sign-in/social", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "mock", callbackURL: "/" }),
-    });
-    return ((await response.json()) as { url: string }).url;
-  });
-  await page.goto(url);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Continue with Mock", exact: true }).click();
   await page.getByRole("textbox", { name: "Email" }).fill(email);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Lists" })).toBeVisible();
+  await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
 }
 
 function sessionEmail(page: Page): Promise<string | null> {
@@ -38,16 +27,34 @@ test("signs in through the provider and keeps the session in an httpOnly cookie"
   expect(await page.evaluate(() => document.cookie)).not.toContain("session_token");
 });
 
-test("signs out", async ({ page }) => {
+test("syncs the lists of the device after the sign-in", async ({ page }) => {
+  await signIn(page, "linus@example.com");
+
+  await expect(page.getByText("Synced")).toBeVisible();
+});
+
+test("tells about a sign-in that the user cancels at the provider", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Continue with Mock", exact: true }).click();
+  await page.waitForURL(/\/mock-oauth\/authorize/);
+  // The provider sends the browser back with an error, as when the user denies access.
+  const authorize = new URL(page.url());
+  const back = new URL(authorize.searchParams.get("redirect_uri") ?? "");
+  back.searchParams.set("error", "access_denied");
+  back.searchParams.set("state", authorize.searchParams.get("state") ?? "");
+  await page.goto(back.toString());
+
+  await expect(page.getByRole("alert")).toHaveText("Could not sign in. Try again.");
+  await expect(page).toHaveURL(/\/settings$/);
+});
+
+test("signs out, and the device starts again without data", async ({ page }) => {
   await signIn(page, "grace@example.com");
+  await expect(page.getByText("Synced")).toBeVisible();
 
-  await page.evaluate(() =>
-    fetch("/api/auth/sign-out", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    }),
-  );
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
 
+  await expect(page.getByRole("button", { name: "Continue with Mock", exact: true })).toBeVisible();
   expect(await sessionEmail(page)).toBeNull();
+  await expect(page.getByText("Synced")).toHaveCount(0);
 });

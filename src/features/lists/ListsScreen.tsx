@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { openList } from "../../app/router.ts";
+import { isPlainClick, openList, openSettings, routePath } from "../../app/router.ts";
 import { useAppSnapshot, useAppStore } from "../../app/store-context.tsx";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import type { Sound } from "../../feedback/feedback.ts";
@@ -60,15 +60,21 @@ function tasksText(count: number): string {
   return `${String(count)} ${count === 1 ? "task" : "tasks"}`;
 }
 
+/** Where the user came from. That place gets the focus, so the user keeps their place. */
+type ListsFrom =
+  | { readonly kind: "start" }
+  | { readonly kind: "list"; readonly listId: ListId }
+  | { readonly kind: "settings" };
+
 interface ListsScreenProps {
-  /** The list that the user came from. It gets the focus, so the user keeps their place. */
-  readonly fromListId: ListId | null;
+  readonly from: ListsFrom;
   /** Opens the list switcher. */
   readonly onFindList: () => void;
 }
 
 /** All lists, each with the number of its open tasks. A list opens its tasks. */
-export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
+export function ListsScreen({ from, onFindList }: ListsScreenProps) {
+  const fromListId = from.kind === "list" ? from.listId : null;
   const store = useAppStore();
   const feedback = useFeedback();
   const { state: liveState } = useAppSnapshot();
@@ -82,6 +88,7 @@ export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const screenRef = useRef<HTMLElement>(null);
+  const settingsRef = useRef<HTMLAnchorElement>(null);
   const pullPanelRef = useRef<HTMLDivElement>(null);
   // The lists screen has nothing to clear. The pull up stays off.
   const clearPanelRef = useRef<HTMLDivElement>(null);
@@ -145,12 +152,15 @@ export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
   // The list that the user came from gets it, so they keep their place.
   const focusAtStart = useEffectEvent(() => {
     if (document.activeElement !== document.body) return;
-    const from = listRef.current?.querySelector<HTMLElement>(
-      `[data-row-id="${fromListId ?? ""}"] [data-control="open"]`,
-    );
+    const target =
+      from.kind === "settings"
+        ? settingsRef.current
+        : listRef.current?.querySelector<HTMLElement>(
+            `[data-row-id="${fromListId ?? ""}"] [data-control="open"]`,
+          );
     // No scroll: the screen gets back the scroll position that it had, so the list is where
     // the user left it. Its row may still move in, so a scroll now could go to a wrong place.
-    (from ?? screenRef.current)?.focus({ preventScroll: true });
+    (target ?? screenRef.current)?.focus({ preventScroll: true });
   });
   useEffect(() => {
     focusAtStart();
@@ -208,7 +218,7 @@ export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
       startDraft(0, true);
     },
     onClear: null,
-    onUp: null,
+    onUp: openSettings,
   });
 
   function commitDraft(current: Draft, title: string, reason: CommitReason): void {
@@ -519,6 +529,30 @@ export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
       }}
     >
       <header className={styles["header"]}>
+        <a
+          ref={settingsRef}
+          href={routePath({ screen: "settings" })}
+          className={styles["settingsLink"]}
+          aria-label="Settings"
+          onClick={(event) => {
+            if (!isPlainClick(event.nativeEvent)) return;
+            event.preventDefault();
+            openSettings();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+            <g
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </g>
+          </svg>
+        </a>
         <div className={styles["headerActions"]}>
           <FindListButton onClick={onFindList} />
           <button
@@ -561,11 +595,16 @@ export function ListsScreen({ fromListId, onFindList }: ListsScreenProps) {
           <motion.div
             ref={pullPanelRef}
             className={styles["pullPanel"]}
-            data-armed={pull.armed === "add"}
+            data-armed={pull.armed === "add" || pull.armed === "up"}
+            data-stage={pull.armed === "up" ? "up" : undefined}
             style={{ rotateX: pull.panels.add.tilt, opacity: pull.panels.add.opacity }}
             aria-hidden="true"
           >
-            {pull.armed === "add" ? "Release to add" : "Pull to add a list"}
+            {pull.armed === "up"
+              ? "Release for settings"
+              : pull.armed === "add"
+                ? "Release to add"
+                : "Pull to add a list"}
           </motion.div>
           <ul
             ref={listRef}

@@ -3,14 +3,18 @@ import type { ListId } from "../model/types.ts";
 
 /** The screen that the URL shows. */
 export type Route =
-  { readonly screen: "lists" } | { readonly screen: "list"; readonly listId: ListId };
+  | { readonly screen: "lists" }
+  | { readonly screen: "list"; readonly listId: ListId }
+  | { readonly screen: "settings" };
 
 const listsPath = "/";
 const listPrefix = "/lists/";
+const settingsPath = "/settings";
 
 /** Returns the route of a path, or null for a path that the app does not know. */
 export function parseRoute(pathname: string): Route | null {
   if (pathname === listsPath) return { screen: "lists" };
+  if (pathname === settingsPath) return { screen: "settings" };
   if (!pathname.startsWith(listPrefix)) return null;
   const encoded = pathname.slice(listPrefix.length);
   if (encoded === "" || encoded.includes("/")) return null;
@@ -23,12 +27,20 @@ export function parseRoute(pathname: string): Route | null {
 }
 
 export function routePath(route: Route): string {
-  return route.screen === "lists" ? listsPath : listPrefix + encodeURIComponent(route.listId);
+  switch (route.screen) {
+    case "lists":
+      return listsPath;
+    case "list":
+      return listPrefix + encodeURIComponent(route.listId);
+    case "settings":
+      return settingsPath;
+  }
 }
 
 /**
- * The history state of a list entry. The lists screen is always the entry just below a list,
- * so going up is the same as going back, and browser back goes up.
+ * The history state of a list entry, or of the settings entry. The lists screen is always the
+ * entry just below them, so going to the lists screen is the same as going back, and browser
+ * back goes there.
  */
 interface ListEntry {
   readonly up: true;
@@ -82,14 +94,33 @@ export function savedListsScroll(): number {
     : 0;
 }
 
-export function openList(listId: ListId): void {
-  // The lists screen gets its scroll position back when the user comes back up.
+/** Opens a screen above the lists screen. */
+function pushAboveLists(route: Route): void {
+  // The lists screen gets its scroll position back when the user comes back.
   if (parseRoute(window.location.pathname)?.screen === "lists") {
     const lists: ListsEntry = { scrollY: window.scrollY };
     window.history.replaceState(lists, "");
   }
   const entry: ListEntry = { up: true };
-  window.history.pushState(entry, "", routePath({ screen: "list", listId }));
+  window.history.pushState(entry, "", routePath(route));
+  notify();
+}
+
+export function openList(listId: ListId): void {
+  pushAboveLists({ screen: "list", listId });
+}
+
+/**
+ * Opens the settings, the level above the lists screen. From a list, the settings take the
+ * place of the list, so back still goes to the lists screen.
+ */
+export function openSettings(): void {
+  if (!isListEntry(window.history.state)) {
+    pushAboveLists({ screen: "settings" });
+    return;
+  }
+  const entry: ListEntry = { up: true };
+  window.history.replaceState(entry, "", routePath({ screen: "settings" }));
   notify();
 }
 
@@ -115,7 +146,7 @@ export function isPlainClick(event: MouseEvent): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** Goes from a list to the lists screen. */
+/** Goes from a list, or from the settings, to the lists screen. */
 export function goUp(): void {
   if (goingBack) return;
   if (isListEntry(window.history.state)) {
@@ -143,6 +174,15 @@ export function rememberRoute(route: Route): void {
   }
 }
 
+/** Forgets the remembered screen, for example after the data of the device is deleted. */
+export function forgetRoute(): void {
+  try {
+    localStorage.removeItem(lastScreenKey);
+  } catch {
+    // Without storage, nothing is remembered.
+  }
+}
+
 function lastScreen(): Route | null {
   try {
     return parseRoute(localStorage.getItem(lastScreenKey) ?? listsPath);
@@ -154,14 +194,18 @@ function lastScreen(): Route | null {
 /**
  * Sets up the history before the first render.
  * An app that opens on the lists screen opens the screen that the user left last.
- * A list always gets the lists screen as the entry below it.
+ * A list and the settings always get the lists screen as the entry below them.
  */
 export function startRouting(): void {
   // The app puts back the scroll position itself, after the screen has rendered.
   window.history.scrollRestoration = "manual";
   const current = parseRoute(window.location.pathname);
   const route = current?.screen === "lists" ? lastScreen() : current;
-  if (route?.screen !== "list" || isListEntry(window.history.state)) return;
+  if (route === null || route.screen === "lists" || isListEntry(window.history.state)) return;
+  // Keep the query, for example the error of a sign-in that came back to the settings.
+  const { search } = window.location;
   window.history.replaceState(null, "", listsPath);
-  openList(route.listId);
+  pushAboveLists(route);
+  if (search !== "")
+    window.history.replaceState(window.history.state, "", routePath(route) + search);
 }

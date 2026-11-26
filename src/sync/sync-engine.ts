@@ -1,6 +1,6 @@
 import type { AppStore } from "../app/store.ts";
 import { visibleLists } from "../model/selectors.ts";
-import type { StoredSync } from "../storage/local-store.ts";
+import type { StoredSync, SyncAccount } from "../storage/local-store.ts";
 import type { ServerResult, SessionUser, SyncTransport } from "./http.ts";
 import { protocolVersion, type OutboxEntry, type PullRequest } from "./protocol.ts";
 
@@ -37,14 +37,21 @@ export const browserClock: Clock = {
 };
 
 export interface SyncEngine {
-  getStatus(): SyncStatus;
+  readonly getStatus: () => SyncStatus;
   /** The user of the session at the last check. Undefined before the first check. */
-  getUser(): SessionUser | null | undefined;
-  subscribe(listener: () => void): () => void;
+  readonly getUser: () => SessionUser | null | undefined;
+  /**
+   * The account that the data of this device belongs to, or null before its first sync.
+   * Undefined before the engine has read the device.
+   */
+  readonly getAccount: () => SyncAccount | null | undefined;
+  readonly subscribe: (listener: () => void) => () => void;
   /** Syncs now. A call during a sync makes one more sync after it. */
-  syncNow(): Promise<void>;
+  readonly syncNow: () => Promise<void>;
   /** Starts the sync triggers: now, on visibility, on network, on changes and on a timer. */
-  start(): () => void;
+  readonly start: () => () => void;
+  /** Stops all syncs for good. It resolves when a sync that runs has ended. */
+  readonly stop: () => Promise<void>;
 }
 
 export interface SyncEngineOptions {
@@ -112,12 +119,15 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const { store, transport, firstListTitle, clock = browserClock } = options;
   let status: SyncStatus = { kind: "syncing", pending: 0 };
   let user: SessionUser | null | undefined;
+  let account: SyncAccount | null | undefined;
   const listeners = new Set<() => void>();
   let running: Promise<void> | null = null;
   let again = false;
   let failures = 0;
   let failingSince: number | null = null;
   let retryTimer: number | null = null;
+  let stopped = false;
+  let stopTriggers: (() => void) | null = null;
 
   function setStatus(next: SyncStatus): void {
     status = next;
@@ -125,15 +135,22 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   }
 
   function setUser(next: SessionUser | null): void {
-    if (user !== undefined && next?.id === user?.id) return;
+    if (user !== undefined && next?.id === user?.id && next?.email === user?.email) return;
     user = next;
     for (const listener of listeners) listener();
   }
 
-  const loadSync = () => store.exclusive((local) => local.loadSync());
+  async function loadSync(): Promise<StoredSync> {
+    const sync = await store.exclusive((local) => local.loadSync());
+    if (account === undefined || account?.id !== sync.account?.id) {
+      account = sync.account;
+      for (const listener of listeners) listener();
+    }
+    return sync;
+  }
   const pendingCount = async () => (await loadSync()).outbox.length;
 
-  async function pull(account: SessionUser): Promise<void> {
+  async function pull(sessionUser: SessionUser): Promise<void> {
     const sync = await loadSync();
     const request: PullRequest = {
       protocol: protocolVersion,
@@ -142,7 +159,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     };
     const changes = value(await transport.pull(request));
     await store.exclusive(async (local, reload) => {
-      if (await local.confirmPull(request.since, changes, account.id)) await reload();
+      if (await local.confirmPull(request.since, changes, sessionUser)) await reload();
     });
   }
 
@@ -154,17 +171,22 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   }
 
   async function once(): Promise<void> {
-    setStatus({ kind: "syncing", pending: await pendingCount() });
-    const account = value(await transport.session());
-    setUser(account);
-    if (account === null) throw new Stopped({ kind: "signInRequired" });
-    const before = await loadSync();
-    if (before.accountId !== null && before.accountId !== account.id) {
-      throw new Stopped({ kind: "accountMismatch", user: account });
+    const pending = await pendingCount();
+    // A state that needs the user, or a lost connection, stays until a sync ends. The status
+    // must not change on each retry, so the bar and its dialogs stay as they are.
+    if (status.kind === "synced" || status.kind === "syncing") {
+      setStatus({ kind: "syncing", pending });
     }
-    if (before.accountId === null) {
+    const sessionUser = value(await transport.session());
+    setUser(sessionUser);
+    if (sessionUser === null) throw new Stopped({ kind: "signInRequired" });
+    const before = await loadSync();
+    if (before.account !== null && before.account.id !== sessionUser.id) {
+      throw new Stopped({ kind: "accountMismatch", user: sessionUser });
+    }
+    if (before.account === null) {
       // The first sync of this device: see what the account has before sending anything.
-      await pull(account);
+      await pull(sessionUser);
       await store.exclusive(async (local, reload) => {
         const sync = await local.loadSync();
         const first = onlyFirstList(sync, firstListTitle);
@@ -175,7 +197,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       });
     }
     await push();
-    await pull(account);
+    await pull(sessionUser);
   }
 
   function scheduleRetry(): number {
@@ -243,10 +265,11 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         await fail(error);
         return;
       }
-    } while (again);
+    } while (again && !stopped);
   }
 
   function syncNow(): Promise<void> {
+    if (stopped) return Promise.resolve();
     if (running !== null) {
       again = true;
       return running;
@@ -289,7 +312,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     window.addEventListener("online", onOnline);
     tick();
     void syncNow();
-    return () => {
+    stopTriggers = () => {
       stopChanges();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
@@ -297,16 +320,26 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         if (timer !== null) clock.clearTimeout(timer);
       }
     };
+    return stopTriggers;
+  }
+
+  async function stop(): Promise<void> {
+    stopped = true;
+    stopTriggers?.();
+    if (retryTimer !== null) clock.clearTimeout(retryTimer);
+    await running;
   }
 
   return {
     getStatus: () => status,
     getUser: () => user,
+    getAccount: () => account,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     syncNow,
     start,
+    stop,
   };
 }

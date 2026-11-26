@@ -1,0 +1,63 @@
+/*
+ * A slim bar at the bottom of the screen. It is calm while the sync works, and stands out when
+ * the user must act.
+ */
+.bar {
+  position: fixed;
+  z-index: 3;
+  inset-inline: 0;
+  inset-block-end: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-block-size: 2.25rem;
+  padding: 0.25rem max(1rem, env(safe-area-inset-right)) max(0.25rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  border-block-start: 1px solid color-mix(in oklch, var(--color-text) 10%, transparent);
+  background: var(--color-surface);
+  color: var(--color-completed-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bar[data-attention] {
+  background: color-mix(in oklch, var(--color-text) 8%, var(--color-surface));
+  color: var(--color-text);
+}
+
+.text {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.action {
+  flex: none;
+  min-block-size: 1.75rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0.875rem;
+  background: var(--color-text);
+  color: var(--color-surface);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: color-mix(in oklch, var(--color-text) 85%, var(--color-surface));
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

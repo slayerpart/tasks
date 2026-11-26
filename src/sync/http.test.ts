@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createHttpTransport } from "./http.ts";
+import { createAccountTransport, createHttpTransport } from "./http.ts";
 import { protocolVersion, type ClientId } from "./protocol.ts";
 
 const pull = { protocol: protocolVersion, clientId: "client" as ClientId, since: 3 };
@@ -78,5 +78,56 @@ describe("createHttpTransport", () => {
       value: { id: "u1", email: "ada@example.com", name: "Ada" },
     });
     expect(await signedOut.session()).toEqual({ kind: "ok", value: null });
+  });
+});
+
+describe("createAccountTransport", () => {
+  function account(response: () => Response) {
+    const requests: { url: string; body: unknown }[] = [];
+    const transport = createAccountTransport((url, init) => {
+      requests.push({ url, body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
+      return Promise.resolve(response());
+    });
+    return { transport, requests };
+  }
+
+  it("reads the providers", async () => {
+    const { transport } = account(() => Response.json({ providers: ["google", "github"] }));
+
+    expect(await transport.providers()).toEqual({ kind: "ok", value: ["google", "github"] });
+  });
+
+  it("rejects an answer without a list of providers", async () => {
+    const { transport } = account(() => Response.json({}));
+
+    expect((await transport.providers()).kind).toBe("error");
+  });
+
+  it("starts a sign-in that comes back to the given path, also after an error", async () => {
+    const { transport, requests } = account(() =>
+      Response.json({ url: "https://accounts.example/authorize", redirect: true }),
+    );
+
+    expect(await transport.startSignIn("github", "/settings")).toEqual({
+      kind: "ok",
+      value: "https://accounts.example/authorize",
+    });
+    expect(requests).toEqual([
+      {
+        url: "/api/auth/sign-in/social",
+        body: { provider: "github", callbackURL: "/settings", errorCallbackURL: "/settings" },
+      },
+    ]);
+  });
+
+  it("signs out here, or on all devices", async () => {
+    const { transport, requests } = account(() => Response.json({ success: true }));
+
+    expect(await transport.signOut()).toEqual({ kind: "ok", value: null });
+    expect(await transport.signOutEverywhere()).toEqual({ kind: "ok", value: null });
+    expect(requests.map((request) => request.url)).toEqual([
+      "/api/auth/sign-out",
+      "/api/auth/revoke-sessions",
+    ]);
   });
 });

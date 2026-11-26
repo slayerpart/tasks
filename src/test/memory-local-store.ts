@@ -15,7 +15,7 @@ export function createMemoryLocalStore(
     base: { lists: new Map(), tasks: new Map() },
     outbox: [],
     version: 0,
-    accountId: null,
+    account: null,
   },
 ): MemoryLocalStore {
   // Random, as on a real device. Two devices with one client ID would lose changes.
@@ -39,7 +39,7 @@ export function createMemoryLocalStore(
     },
     pendingMutations: () => Promise.resolve(sync.outbox),
     loadSync: () => Promise.resolve(sync),
-    confirmPull: (since, pull, accountId) => {
+    confirmPull: (since, pull, account) => {
       if (since !== sync.version) return Promise.resolve(false);
       const lists = new Map(sync.base.lists);
       for (const list of pull.lists) lists.set(list.id, list);
@@ -49,7 +49,7 @@ export function createMemoryLocalStore(
         ...sync,
         base: { lists, tasks },
         version: pull.version,
-        accountId,
+        account: { id: account.id, email: account.email },
         outbox: sync.outbox.filter((entry) => entry.seq > pull.lastSeq),
       };
       return Promise.resolve(true);
@@ -64,7 +64,7 @@ export function createMemoryLocalStore(
         base: { lists: new Map(), tasks: new Map() },
         outbox: [],
         version: 0,
-        accountId: null,
+        account: null,
         clientId: newClientId(),
       };
       return Promise.resolve();

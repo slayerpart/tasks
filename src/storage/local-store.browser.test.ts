@@ -7,6 +7,8 @@ import { emptyState, type MutationId, type State } from "../model/types.ts";
 import type { PullChanges } from "../sync/protocol.ts";
 import { openLocalStore, type LocalStore } from "./local-store.ts";
 
+const userA = { id: "user-a", email: "a@example.com" };
+
 const openStores: { name: string; store: LocalStore }[] = [];
 
 async function freshStore(): Promise<{ name: string; store: LocalStore }> {
@@ -105,7 +107,7 @@ describe("LocalStore", () => {
     const sync = await store.loadSync();
 
     expect(sync.clientId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(sync).toMatchObject({ version: 0, accountId: null, outbox: [] });
+    expect(sync).toMatchObject({ version: 0, account: null, outbox: [] });
   });
 
   it("saves a pull and removes the confirmed changes from the outbox", async () => {
@@ -122,13 +124,13 @@ describe("LocalStore", () => {
       tasks: [...confirmed.tasks.values()],
     };
 
-    expect(await store.confirmPull(0, pull, "user-a")).toBe(true);
+    expect(await store.confirmPull(0, pull, userA)).toBe(true);
     store.close();
     const reopened = await openLocalStore(name);
     openStores.push({ name, store: reopened });
 
     const sync = await reopened.loadSync();
-    expect(sync).toMatchObject({ version: 7, accountId: "user-a" });
+    expect(sync).toMatchObject({ version: 7, account: userA });
     expect(sync.base).toEqual(confirmed);
     expect(sync.outbox).toEqual(pending.slice(2));
     expect(await reopened.load()).toEqual(mutations.reduce(applyMutation, emptyState));
@@ -141,9 +143,9 @@ describe("LocalStore", () => {
     await store.commit(createList);
     const pull: PullChanges = { kind: "ok", version: 3, lastSeq: 1, lists: [], tasks: [] };
 
-    expect(await store.confirmPull(2, pull, "user-a")).toBe(false);
+    expect(await store.confirmPull(2, pull, userA)).toBe(false);
 
-    expect(await store.loadSync()).toMatchObject({ version: 0, accountId: null });
+    expect(await store.loadSync()).toMatchObject({ version: 0, account: null });
     expect(await store.pendingMutations()).toHaveLength(1);
   });
 
@@ -163,17 +165,13 @@ describe("LocalStore", () => {
     const { store } = await freshStore();
     for (const mutation of sampleMutations()) await store.commit(mutation);
     const before = await store.loadSync();
-    await store.confirmPull(
-      0,
-      { kind: "ok", version: 1, lastSeq: 0, lists: [], tasks: [] },
-      "user-a",
-    );
+    await store.confirmPull(0, { kind: "ok", version: 1, lastSeq: 0, lists: [], tasks: [] }, userA);
 
     await store.wipe();
 
     const after = await store.loadSync();
     expect(await store.load()).toEqual(emptyState);
-    expect(after).toMatchObject({ version: 0, accountId: null, outbox: [] });
+    expect(after).toMatchObject({ version: 0, account: null, outbox: [] });
     expect(after.clientId).not.toBe(before.clientId);
   });
 
@@ -201,6 +199,34 @@ describe("LocalStore", () => {
     const sync = await store.loadSync();
     expect(sync.base).toEqual(emptyState);
     expect(sync.outbox.map((entry) => entry.mutation)).toEqual(mutations);
-    expect(sync).toMatchObject({ version: 0, accountId: null });
+    expect(sync).toMatchObject({ version: 0, account: null });
+  });
+
+  it("keeps the client ID of a version 2 device, with no account", async () => {
+    const name = `test-${crypto.randomUUID()}`;
+    const mutation = sampleMutations()[0];
+    if (mutation === undefined) throw new Error("Setup failed.");
+    const old = await openDB(name, 2, {
+      upgrade(database) {
+        database.createObjectStore("lists", { keyPath: "id" });
+        database.createObjectStore("tasks", { keyPath: "id" });
+        database.createObjectStore("outbox", { autoIncrement: true });
+        database.createObjectStore("meta");
+      },
+    });
+    await old.add("outbox", mutation);
+    await old.put("meta", { clientId: "client-v2", version: 0, accountId: null }, "sync");
+    old.close();
+
+    const store = await openLocalStore(name);
+    openStores.push({ name, store });
+
+    expect(await store.loadSync()).toEqual({
+      clientId: "client-v2",
+      version: 0,
+      account: null,
+      base: emptyState,
+      outbox: [{ seq: 1, mutation }],
+    });
   });
 });

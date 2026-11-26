@@ -1,0 +1,69 @@
+.section {
+  /* Settings text can be selected and copied, for example the email of the account. */
+  user-select: text;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem 1.5rem;
+}
+
+.sectionHeading {
+  margin: 0;
+  color: var(--color-completed-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.text {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: grid;
+  gap: 0.5rem;
+  max-inline-size: 24rem;
+}
+
+.dialogText {
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-completed-text);
+}
+
+/* The status region stays in the page when it is empty, so screen readers see its messages. */
+.muted:empty {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The section takes the focus after a change that removes the focused control. */
+.section:focus-visible {
+  outline: none;
+}
+
+.section:focus-visible .sectionHeading {
+  outline: 2px solid var(--color-focus, Highlight);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

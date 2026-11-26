@@ -29,6 +29,16 @@ export interface AuthOptions {
   readonly rateLimit?: false;
 }
 
+/** The IDs of the providers that a user can sign in with, in the order of the sign-in buttons. */
+export function providerIds(options: AuthOptions): string[] {
+  const { google, github, testProviders = [] } = options;
+  return [
+    ...(google === undefined ? [] : ["google"]),
+    ...(github === undefined ? [] : ["github"]),
+    ...testProviders.map((provider) => provider.providerId),
+  ];
+}
+
 export function createAuth(options: AuthOptions) {
   const { google, github, testProviders = [] } = options;
   return betterAuth({

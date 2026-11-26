@@ -167,7 +167,7 @@ describe("undo", () => {
       await device.confirmPull(
         0,
         { kind: "ok", version: 1, lastSeq: 1, lists: [{ ...confirmed, title: "Home" }], tasks: [] },
-        "user-a",
+        { id: "user-a", email: "a@example.com" },
       );
       await reload();
     });

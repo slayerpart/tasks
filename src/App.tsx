@@ -3,19 +3,24 @@ import { useEffect, useState } from "react";
 import styles from "./App.module.css";
 import {
   goUp,
+  openSettings,
   rememberRoute,
+  routePath,
   savedListsScroll,
   showLists,
   switchList,
   useRoute,
+  type Route,
 } from "./app/router.ts";
 import { useAppSnapshot, useAppStore } from "./app/store-context.tsx";
 import { useFeedback } from "./feedback/feedback-context.tsx";
 import { ListsScreen } from "./features/lists/ListsScreen.tsx";
+import { SettingsScreen } from "./features/settings/SettingsScreen.tsx";
 import { ListSwitcher, type SwitcherChoice } from "./features/switcher/ListSwitcher.tsx";
 import { TaskListScreen } from "./features/tasks/TaskListScreen.tsx";
 import * as commands from "./model/commands.ts";
 import type { ListId } from "./model/types.ts";
+import { SyncStatusBar } from "./sync/SyncStatusBar.tsx";
 import { ScreenTransition, type Transition } from "./ui/ScreenTransition.tsx";
 import { isSwitcherKey } from "./ui/shortcuts.ts";
 
@@ -23,16 +28,20 @@ const appName = "Tasks";
 
 /** The screen on display. Each new screen gets a new count, so it is a new React element. */
 interface Shown {
-  readonly listId: ListId | null;
+  readonly screen: Route;
   readonly count: number;
   readonly transition: Transition | null;
 }
 
-function transitionBetween(from: ListId | null, to: ListId | null): Transition | null {
-  if (from === null && to !== null) return { kind: "open", listId: to };
-  if (from !== null && to === null) return { kind: "up", listId: from };
-  if (from !== null && to !== null) return { kind: "switch", listId: to };
-  return null;
+function transitionBetween(from: Route, to: Route): Transition | null {
+  if (to.screen === "settings") return from.screen === "settings" ? null : { kind: "settings" };
+  if (to.screen === "list") {
+    if (from.screen === "list") return { kind: "switch", listId: to.listId };
+    // From the settings, the list switcher can open a list at once.
+    return { kind: "open", listId: to.listId };
+  }
+  if (from.screen === "list") return { kind: "up", listId: from.listId };
+  return from.screen === "settings" ? { kind: "down" } : null;
 }
 
 /**
@@ -78,12 +87,18 @@ export function App() {
   if (list !== null && list.id !== lastListId) setLastListId(list.id);
 
   const shownListId = list?.id ?? null;
-  const [shown, setShown] = useState<Shown>({ listId: shownListId, count: 0, transition: null });
-  if (shown.listId !== shownListId) {
+  const screen: Route =
+    route?.screen === "settings"
+      ? route
+      : list === null
+        ? { screen: "lists" }
+        : { screen: "list", listId: list.id };
+  const [shown, setShown] = useState<Shown>({ screen, count: 0, transition: null });
+  if (routePath(shown.screen) !== routePath(screen)) {
     setShown({
-      listId: shownListId,
+      screen,
       count: shown.count + 1,
-      transition: transitionBetween(shown.listId, shownListId),
+      transition: transitionBetween(shown.screen, screen),
     });
   }
 
@@ -97,8 +112,10 @@ export function App() {
   }, [route, known, originId]);
 
   useEffect(() => {
-    if (route !== null && known) rememberRoute(route);
-    document.title = list === null ? `Lists - ${appName}` : `${list.title} - ${appName}`;
+    // The app opens on the lists or a list, never on the settings.
+    if (route !== null && known && route.screen !== "settings") rememberRoute(route);
+    const title = route?.screen === "settings" ? "Settings" : (list?.title ?? "Lists");
+    document.title = `${title} - ${appName}`;
   }, [route, known, list]);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -145,14 +162,25 @@ export function App() {
           <ScreenTransition
             // A new screen for each move, so no draft or focus moves to another list.
             key={shown.count}
-            screen={list === null ? "lists" : "list"}
+            screen={screen.screen}
             transition={shown.transition}
-            scrollY={list === null ? savedListsScroll() : 0}
+            scrollY={screen.screen === "lists" ? savedListsScroll() : 0}
           >
-            {list === null ? (
-              <ListsScreen fromListId={lastListId} onFindList={openSwitcher} />
-            ) : (
+            {list !== null ? (
               <TaskListScreen list={list} onFindList={openSwitcher} />
+            ) : screen.screen === "settings" ? (
+              <SettingsScreen />
+            ) : (
+              <ListsScreen
+                from={
+                  shown.transition?.kind === "down"
+                    ? { kind: "settings" }
+                    : lastListId === null
+                      ? { kind: "start" }
+                      : { kind: "list", listId: lastListId }
+                }
+                onFindList={openSwitcher}
+              />
             )}
           </ScreenTransition>
         </AnimatePresence>
@@ -162,7 +190,9 @@ export function App() {
           takes the focus with its title, which tells it already.
         */}
         <p className={styles["visuallyHidden"]} role="status">
-          {shown.transition?.kind === "up" && <span key={shown.count}>Lists</span>}
+          {(shown.transition?.kind === "up" || shown.transition?.kind === "down") && (
+            <span key={shown.count}>Lists</span>
+          )}
         </p>
         <ListSwitcher
           open={switcherOpen}
@@ -176,6 +206,7 @@ export function App() {
         <p className={styles["saveError"]} role="status">
           {saveFailed ? "Could not save the last change on this device." : ""}
         </p>
+        <SyncStatusBar onSignIn={openSettings} onSettingsScreen={screen.screen === "settings"} />
       </main>
     </MotionConfig>
   );

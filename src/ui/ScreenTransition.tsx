@@ -7,12 +7,11 @@ import styles from "./ScreenTransition.module.css";
 
 /**
  * A move between the lists screen and the list with this ID, or from one list to the list
- * with this ID.
+ * with this ID. Or a move from the lists screen up to the settings, or back down.
  */
-export interface Transition {
-  readonly kind: "open" | "up" | "switch";
-  readonly listId: ListId;
-}
+export type Transition =
+  | { readonly kind: "open" | "up" | "switch"; readonly listId: ListId }
+  | { readonly kind: "settings" | "down" };
 
 export const transitionTiming = {
   /** How long a row takes to come in. */
@@ -45,8 +44,9 @@ function titleEnds(
   frame: HTMLElement,
   transition: Transition,
 ): { source: HTMLElement; target: HTMLElement } | null {
-  // Between two lists, the old title fades out and the new title fades in.
-  if (transition.kind === "switch") return null;
+  // Between two lists, the old title fades out and the new title fades in. The settings have
+  // no title of a list.
+  if (transition.kind !== "open" && transition.kind !== "up") return null;
   const rowTitle = (scope: ParentNode) =>
     [...scope.querySelectorAll<HTMLElement>("[data-row-id]")]
       .find((row) => row.dataset["rowId"] === transition.listId)
@@ -68,10 +68,9 @@ function prefersReducedMotion(): boolean {
 }
 
 function isTransition(value: unknown): value is Transition {
+  if (typeof value !== "object" || value === null || !("kind" in value)) return false;
+  if (value.kind === "settings" || value.kind === "down") return true;
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
     (value.kind === "open" || value.kind === "up" || value.kind === "switch") &&
     "listId" in value &&
     typeof value.listId === "string"
@@ -88,7 +87,11 @@ function prepare(frame: HTMLElement, phase: Phase, transition: Transition) {
   const timing = transitionTiming;
   const lists = frame.dataset["screen"] === "lists";
   const rows = [...frame.querySelectorAll<HTMLElement>("[data-row-id]")];
-  const anchor = rows.findIndex((row) => row.dataset["rowId"] === transition.listId);
+  // The row of the list that opens or closes. The settings have none: all lists move.
+  const anchor =
+    "listId" in transition
+      ? rows.findIndex((row) => row.dataset["rowId"] === transition.listId)
+      : -1;
   // Rows below the viewport do not add to the cascade, so a long list does not feel slow.
   const visible = rows.filter((row) => row.getBoundingClientRect().top < window.innerHeight);
   const base = phase === "enter" ? timing.enterDelayMs : 0;
@@ -132,8 +135,8 @@ function prepare(frame: HTMLElement, phase: Phase, transition: Transition) {
 }
 
 interface ScreenTransitionProps {
-  /** "lists" or "list". The lists screen moves its rows around the opened list. */
-  readonly screen: "lists" | "list";
+  /** The lists screen moves its rows around the opened list. */
+  readonly screen: "lists" | "list" | "settings";
   /** The move that brought this screen, or null for the first screen of the app. */
   readonly transition: Transition | null;
   /** Where the page scrolls to when the screen appears. */

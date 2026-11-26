@@ -22,6 +22,8 @@ export interface Theme {
   readonly swipeTrack: SchemeColor;
   readonly swipeComplete: SchemeColor;
   readonly swipeDelete: SchemeColor;
+  /** Text that tells about a failure. It has 4.5:1 contrast with the surface. */
+  readonly errorText: SchemeColor;
 }
 
 export const defaultTheme = {
@@ -35,6 +37,7 @@ export const defaultTheme = {
   swipeTrack: { light: "oklch(32% 0.01 60)", dark: "oklch(11% 0.005 60)" },
   swipeComplete: { light: "oklch(60% 0.15 150)", dark: "oklch(56% 0.14 150)" },
   swipeDelete: { light: "oklch(42% 0.17 25)", dark: "oklch(40% 0.16 25)" },
+  errorText: { light: "oklch(48% 0.19 25)", dark: "oklch(74% 0.14 25)" },
 } as const satisfies Theme;
 
 function kebabCase(name: string): string {

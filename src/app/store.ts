@@ -28,16 +28,18 @@ export interface AppStore {
    * It returns null when there is nothing to undo. The history lasts for the session.
    */
   readonly undo: (mutationId?: MutationId) => Undone | null;
+  /** Calls the listener after each change of the user, also an undo. */
+  readonly onLocalChange: (listener: () => void) => () => void;
   /**
    * Runs a task on the device data after all earlier saves and before later ones, for example
    * a pull. `reload` shows the data of the device again, with the changes that still wait to
    * be saved on top.
    */
-  /** Calls the listener after each change of the user, also an undo. */
-  readonly onLocalChange: (listener: () => void) => () => void;
   readonly exclusive: <T>(
     task: (local: LocalStore, reload: () => Promise<void>) => Promise<T>,
   ) => Promise<T>;
+  /** Takes no more changes, for example while the data of the device goes. */
+  readonly freeze: () => void;
 }
 
 export interface Undone {
@@ -50,7 +52,8 @@ export interface Undone {
 /** The inverse gets a new ID and time when the user undoes the change. */
 type HistoryEntry = Undone;
 
-const firstListTitle = "Tasks";
+/** The title of the list that the app creates on a new device. */
+export const firstListTitle = "Tasks";
 
 /** Loads the data on this device and returns a store that is ready to render. */
 export async function openAppStore(
@@ -66,6 +69,7 @@ export async function openAppStore(
   /** The changes that the user made and the device has not saved yet, oldest first. */
   const unsaved: Mutation[] = [];
   const changeListeners = new Set<() => void>();
+  let frozen = false;
 
   function publish(next: AppSnapshot): void {
     snapshot = next;
@@ -85,6 +89,7 @@ export async function openAppStore(
   }
 
   function apply(mutation: Mutation): void {
+    if (frozen) return;
     publish({ ...snapshot, state: applyMutation(snapshot.state, mutation) });
     pending++;
     unsaved.push(mutation);
@@ -132,6 +137,9 @@ export async function openAppStore(
     onLocalChange: (listener) => {
       changeListeners.add(listener);
       return () => changeListeners.delete(listener);
+    },
+    freeze: () => {
+      frozen = true;
     },
     exclusive: (task) => {
       const run = queue.then(() => task(local, reload));
