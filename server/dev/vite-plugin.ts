@@ -1,7 +1,7 @@
 import type { Plugin } from "vite";
 import type { OAuthClient } from "../auth/auth.ts";
 import type { Database } from "../db/database.ts";
-import { nodeMiddleware, type WebHandler } from "./node-adapter.ts";
+import { nodeMiddleware, type WebHandler } from "../node-adapter.ts";
 
 export interface LocalApiOptions {
   /** Adds the mock provider. Only for tests and local development. */

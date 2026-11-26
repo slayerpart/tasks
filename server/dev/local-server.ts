@@ -3,7 +3,7 @@ import { createAuth, providerIds, type AuthOptions, type OAuthClient } from "../
 import type { Database } from "../db/database.ts";
 import { createPgSyncServer } from "../sync/pg-sync-server.ts";
 import { createMockOAuth, mockProviders } from "./mock-oauth.ts";
-import type { WebHandler } from "./node-adapter.ts";
+import type { WebHandler } from "../node-adapter.ts";
 
 /** Signs the cookies of local servers only. Production reads its secret from the environment. */
 const localSecret = "local-development-secret-not-for-production-use";
@@ -25,7 +25,7 @@ export function createLocalServer(options: LocalServerOptions): WebHandler {
     db,
     baseURL: origin,
     secret: localSecret,
-    rateLimit: false,
+    rateLimit: { kind: "off" },
     ...(google === undefined ? {} : { google }),
     ...(github === undefined ? {} : { github }),
     ...(mockOAuth ? { testProviders: mockProviders(origin) } : {}),

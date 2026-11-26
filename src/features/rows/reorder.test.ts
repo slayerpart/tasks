@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { autoScrollSpeed, previewMove, reorderConfig, reorderTarget } from "./reorder.ts";
+import {
+  autoScrollDistance,
+  autoScrollSpeed,
+  previewMove,
+  reorderConfig,
+  reorderTarget,
+} from "./reorder.ts";
 
 describe("reorderTarget", () => {
   it("moves one slot per row height, rounded to the nearest slot", () => {
@@ -42,5 +48,30 @@ describe("autoScrollSpeed", () => {
     expect(autoScrollSpeed(0, 800)).toBe(-reorderConfig.maxScrollSpeed);
     expect(autoScrollSpeed(800, 800)).toBe(reorderConfig.maxScrollSpeed);
     expect(autoScrollSpeed(2000, 800)).toBe(reorderConfig.maxScrollSpeed);
+  });
+});
+
+describe("autoScrollDistance", () => {
+  /** The px that the page scrolls in one second at this frame rate. */
+  function scrolledInASecond(framesPerSecond: number): number {
+    let distance = 0;
+    for (let frame = 0; frame < framesPerSecond; frame++) {
+      distance += autoScrollDistance(790, 800, 1000 / framesPerSecond);
+    }
+    return distance;
+  }
+
+  it("scrolls the same distance at each frame rate", () => {
+    const expected = autoScrollSpeed(790, 800);
+
+    expect(scrolledInASecond(60)).toBeCloseTo(expected);
+    expect(scrolledInASecond(120)).toBeCloseTo(expected);
+    expect(scrolledInASecond(15)).toBeCloseTo(expected);
+  });
+
+  it("does not jump after a stall", () => {
+    expect(autoScrollDistance(800, 800, 2000)).toBe(
+      (reorderConfig.maxScrollSpeed * reorderConfig.maxScrollStepMs) / 1000,
+    );
   });
 });

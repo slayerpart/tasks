@@ -1,4 +1,13 @@
-import { bigint, boolean, index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 const time = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 /** A server version. JavaScript numbers are exact up to 2^53, which is more than enough. */
@@ -69,6 +78,15 @@ export const verification = pgTable(
   },
   (table) => [index("verifications_identifier").on(table.identifier)],
 );
+
+/** The requests of each client IP and path in the current window, for the limits of Better Auth. */
+export const rateLimit = pgTable("rate_limits", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  /** Milliseconds since 1970. */
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
 
 // The data of the app.
 

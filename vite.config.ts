@@ -4,6 +4,7 @@ import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 import type { OAuthClient } from "./server/auth/auth.ts";
 import { localApi } from "./server/dev/vite-plugin.ts";
+import { securityHeaders } from "./server/production/routes.ts";
 
 /** An OAuth app from `.env.local`, for example GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. */
 function oauthClient(
@@ -29,6 +30,8 @@ export default defineConfig(({ mode }) => {
         ...oauthClient(env, "github"),
       }),
     ],
+    // The E2E tests run on the preview server, so they find what the policy of production blocks.
+    preview: { headers: securityHeaders },
     test: {
       projects: [
         {

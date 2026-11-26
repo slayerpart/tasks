@@ -2,10 +2,12 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { protocolVersion } from "../../src/sync/protocol.ts";
+import type { Database } from "../db/database.ts";
+import { rateLimit } from "../db/schema.ts";
 import { createTestDatabase } from "../db/test-database.ts";
 import { createLocalServer } from "../dev/local-server.ts";
-import { nodeMiddleware } from "../dev/node-adapter.ts";
-import { createAuth } from "./auth.ts";
+import { nodeMiddleware } from "../node-adapter.ts";
+import { createAuth, type Auth } from "./auth.ts";
 
 const servers: Server[] = [];
 
@@ -133,6 +135,7 @@ describe("sign-in", () => {
       baseURL: "https://tasks.example",
       secret: "a-test-secret-with-at-least-32-characters",
       github: { clientId: "id", clientSecret: "secret" },
+      rateLimit: { kind: "off" },
     });
 
     const response = await auth.handler(
@@ -215,5 +218,72 @@ describe("sign-in", () => {
     const browser = new Browser(await startServer());
 
     expect((await browser.fetch("/api/nothing")).status).toBe(404);
+  });
+});
+
+describe("rate limit", () => {
+  function createLimitedAuth(db: Database): Auth {
+    return createAuth({
+      db,
+      baseURL: "https://tasks.example",
+      secret: "a-test-secret-with-at-least-32-characters",
+      github: { clientId: "id", clientSecret: "secret" },
+      rateLimit: { kind: "database", ipHeader: "x-vercel-forwarded-for" },
+    });
+  }
+
+  /** Better Auth allows 3 sign-ins in 10 seconds from one IP. */
+  function startSignIn(auth: Auth, headers: Record<string, string>): Promise<Response> {
+    return auth.handler(
+      new Request("https://tasks.example/api/auth/sign-in/social", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://tasks.example",
+          ...headers,
+        },
+        body: JSON.stringify({ provider: "github", callbackURL: "/" }),
+      }),
+    );
+  }
+
+  it("stops too many sign-ins from one client IP", async () => {
+    const auth = createLimitedAuth(await createTestDatabase());
+    const ada = { "x-vercel-forwarded-for": "203.0.113.1" };
+
+    const statuses = [];
+    for (let i = 0; i < 4; i++) statuses.push((await startSignIn(auth, ada)).status);
+
+    expect(statuses).toEqual([200, 200, 200, 429]);
+    expect((await startSignIn(auth, { "x-vercel-forwarded-for": "203.0.113.2" })).status).toBe(200);
+  });
+
+  it("ignores the IP headers that a client can set", async () => {
+    const auth = createLimitedAuth(await createTestDatabase());
+
+    const statuses = [];
+    for (let i = 0; i < 4; i++) {
+      const fake = `198.51.100.${String(i)}`;
+      const response = await startSignIn(auth, {
+        "x-vercel-forwarded-for": "203.0.113.1",
+        "x-forwarded-for": fake,
+        "x-real-ip": fake,
+      });
+      statuses.push(response.status);
+    }
+
+    expect(statuses).toEqual([200, 200, 200, 429]);
+  });
+
+  it("keeps the counts in the database, so all instances share them", async () => {
+    const db = await createTestDatabase();
+    const auth = createLimitedAuth(db);
+
+    await startSignIn(auth, { "x-vercel-forwarded-for": "203.0.113.1" });
+
+    const rows = await db.select().from(rateLimit);
+    expect(rows.map(({ key, count }) => ({ key, count }))).toEqual([
+      { key: "203.0.113.1|/sign-in/social", count: 1 },
+    ]);
   });
 });

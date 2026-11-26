@@ -3,7 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { genericOAuth, type GenericOAuthConfig } from "better-auth/plugins/generic-oauth";
 import type { UserId } from "../../src/sync/server-core.ts";
 import type { Database } from "../db/database.ts";
-import { account, session, user, verification } from "../db/schema.ts";
+import { account, rateLimit, session, user, verification } from "../db/schema.ts";
 
 const day = 24 * 60 * 60;
 
@@ -23,11 +23,20 @@ export interface AuthOptions {
   /** Providers for tests and local development only, such as the mock provider. */
   readonly testProviders?: readonly GenericOAuthConfig[];
   /**
-   * Better Auth limits requests per client IP in production. Local servers turn it off, because
-   * all their clients share one address.
+   * Better Auth limits the requests of each client IP. The counts are in the database, because
+   * each serverless instance has its own memory. Local servers turn the limit off, because all
+   * their clients share one address.
    */
-  readonly rateLimit?: false;
+  readonly rateLimit: RateLimit;
 }
+
+export type RateLimit =
+  | { readonly kind: "off" }
+  | {
+      readonly kind: "database";
+      /** The header with the client IP. Only the platform must set it, never the client. */
+      readonly ipHeader: string;
+    };
 
 /** The IDs of the providers that a user can sign in with, in the order of the sign-in buttons. */
 export function providerIds(options: AuthOptions): string[] {
@@ -46,7 +55,7 @@ export function createAuth(options: AuthOptions) {
     secret: options.secret,
     database: drizzleAdapter(options.db, {
       provider: "pg",
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, rateLimit },
     }),
     socialProviders: {
       ...(google === undefined ? {} : { google }),
@@ -60,9 +69,15 @@ export function createAuth(options: AuthOptions) {
       cookiePrefix: "tasks",
       // Better Auth skips this check when NODE_ENV is "test". The tests must see it.
       disableOriginCheck: false,
+      ...(options.rateLimit.kind === "database"
+        ? { ipAddress: { ipAddressHeaders: [options.rateLimit.ipHeader] } }
+        : {}),
     },
     telemetry: { enabled: false },
-    ...(options.rateLimit === false ? { rateLimit: { enabled: false } } : {}),
+    rateLimit:
+      options.rateLimit.kind === "database"
+        ? { enabled: true, storage: "database" }
+        : { enabled: false },
     plugins: testProviders.length === 0 ? [] : [genericOAuth({ config: [...testProviders] })],
   });
 }

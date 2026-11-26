@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { GenericOAuthConfig } from "better-auth/plugins/generic-oauth";
-import type { WebHandler } from "./node-adapter.ts";
+import type { WebHandler } from "../node-adapter.ts";
 
 /**
  * A fake OAuth provider for tests and local development. Its sign-in page asks only for an

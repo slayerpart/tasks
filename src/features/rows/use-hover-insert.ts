@@ -26,6 +26,8 @@ export function useHoverInsert(
 ): HoverInsert {
   const [gap, setGap] = useState<number | null>(null);
   const pending = useRef<{ index: number; timer: number } | null>(null);
+  /** Where the last pointer move was, in viewport coordinates. */
+  const lastPoint = useRef<{ x: number; y: number } | null>(null);
 
   function cancelPending(): void {
     if (pending.current !== null) window.clearTimeout(pending.current.timer);
@@ -48,6 +50,10 @@ export function useHoverInsert(
       }
       // React also passes up moves over a row menu, which renders outside the list.
       if (!(event.target instanceof Node && list.contains(event.target))) return;
+      // After a scroll or a layout change, browsers send a move at the same point: the rows
+      // moved, not the mouse. Only a real move of the mouse can open a gap.
+      const moved = lastPoint.current?.x !== event.clientX || lastPoint.current.y !== event.clientY;
+      lastPoint.current = { x: event.clientX, y: event.clientY };
       const rows = openRowBoxes(list);
       if (gap !== null) {
         const above = rows[gap - 1];
@@ -59,6 +65,11 @@ export function useHoverInsert(
           event.clientY >= above.bottom - zone &&
           event.clientY <= below.top + zone;
         if (!inside) close();
+        return;
+      }
+      if (!moved) {
+        // The line that the mouse rested on has moved away.
+        cancelPending();
         return;
       }
       const index = hoverGapAt(rows, event.clientY);

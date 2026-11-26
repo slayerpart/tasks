@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "regions": ["fra1"],
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm build:vercel"
 }

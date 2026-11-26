@@ -7,8 +7,13 @@ export const reorderConfig = {
   holdSlop: 10,
   /** Near the top or the bottom edge of the viewport, the page scrolls during a drag. */
   edgeSize: 72,
-  /** The scroll speed at the very edge, in px per frame. */
-  maxScrollSpeed: 14,
+  /** The scroll speed at the very edge, in px per second. */
+  maxScrollSpeed: 840,
+  /**
+   * The longest time that one scroll step counts, in ms. After a stall the page continues
+   * and does not jump.
+   */
+  maxScrollStepMs: 250,
 } as const satisfies Record<string, number>;
 
 /** The index that a row dragged by `offset` px from `from` moves to, among `count` rows. */
@@ -39,7 +44,7 @@ export function previewMove<Row extends { readonly heat: number }>(
   return reordered.map((row, index) => ({ ...row, heat: heatAt(index, rows.length) }));
 }
 
-/** Px per frame to scroll the page, negative upward, for a pointer at `clientY`. */
+/** Px per second to scroll the page, negative upward, for a pointer at `clientY`. */
 export function autoScrollSpeed(clientY: number, viewportHeight: number): number {
   const { edgeSize, maxScrollSpeed } = reorderConfig;
   const depth =
@@ -49,5 +54,19 @@ export function autoScrollSpeed(clientY: number, viewportHeight: number): number
         ? clientY - (viewportHeight - edgeSize)
         : 0;
   const clamped = Math.max(-edgeSize, Math.min(edgeSize, depth));
-  return Math.round((clamped / edgeSize) * maxScrollSpeed);
+  return (clamped / edgeSize) * maxScrollSpeed;
+}
+
+/**
+ * The px to scroll the page in a frame that comes `elapsedMs` after the last frame. The
+ * distance depends on the time, not on the frame rate: a busy or a 120 Hz screen scrolls
+ * at the same speed as a 60 Hz screen.
+ */
+export function autoScrollDistance(
+  clientY: number,
+  viewportHeight: number,
+  elapsedMs: number,
+): number {
+  const ms = Math.min(Math.max(elapsedMs, 0), reorderConfig.maxScrollStepMs);
+  return (autoScrollSpeed(clientY, viewportHeight) * ms) / 1000;
 }

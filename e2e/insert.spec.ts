@@ -98,6 +98,34 @@ test.describe("with a mouse", () => {
       restingTop,
     );
   });
+
+  test("a list that moves under a still mouse opens no gap", async ({ page }) => {
+    // Enough tasks to scroll the page.
+    await addTasks(
+      page,
+      Array.from({ length: 20 }, (_, index) => `Task ${String(index + 1)}`),
+    );
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    const line = await lineBelow(page, "Task 1");
+    await page.mouse.move(line.x, line.y - 32);
+    await page.waitForTimeout(400);
+
+    // The page scrolls, for example from the keyboard. The line comes under the mouse, and
+    // the browser sends a pointer move with the same position.
+    await page.evaluate(() => {
+      window.scrollBy(0, 32);
+    });
+    const restingTop = (
+      await page.getByRole("button", { name: "Edit Task 2", exact: true }).boundingBox()
+    )?.y;
+    await page.waitForTimeout(400);
+
+    expect(
+      (await page.getByRole("button", { name: "Edit Task 2", exact: true }).boundingBox())?.y,
+    ).toBe(restingTop);
+  });
 });
 
 test.describe("with two fingers", () => {

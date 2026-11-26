@@ -105,20 +105,39 @@ test("a row that leaves cannot be reached during its exit animation", async ({
 }) => {
   await addTasks(page, ["Milk", "Bread"]);
   await page.getByRole("button", { name: "Add task" }).click();
+  // The exit animations are short. On a busy machine they can end before the test reads the
+  // page. So the page itself tries to focus the controls of each row as it starts to leave.
+  await page.evaluate(() => {
+    const attempts: { control: string; focused: boolean }[] = [];
+    Object.assign(window, { focusAttempts: attempts });
+    new MutationObserver((records) => {
+      for (const { target } of records) {
+        if (!(target instanceof HTMLElement) || !target.hasAttribute("inert")) continue;
+        for (const control of target.querySelectorAll<HTMLElement>("input, textarea")) {
+          control.focus();
+          attempts.push({
+            control: control.getAttribute("aria-label") ?? control.tagName,
+            focused: document.activeElement === control,
+          });
+        }
+      }
+    }).observe(document.body, { subtree: true, attributeFilter: ["inert"] });
+  });
   await page.keyboard.press("Escape");
   await deleteTask(page, hasTouch, "Milk");
 
-  // No wait: the rows are still in their exit animations. Playwright ignores `inert` in
-  // its role queries, so the test checks that focus cannot reach the leaving controls.
-  const leaving = page.getByRole("textbox").or(page.getByRole("checkbox", { name: "Milk" }));
-  const focusable = await leaving.evaluateAll((controls) =>
-    controls.map((control) => {
-      if (control instanceof HTMLElement) control.focus();
-      return document.activeElement === control;
-    }),
-  );
-  expect(focusable).toEqual(focusable.map(() => false));
-  expect(focusable.length).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        "focusAttempts" in window && Array.isArray(window.focusAttempts)
+          ? (window.focusAttempts as unknown[])
+          : [],
+      ),
+    )
+    .toEqual([
+      { control: "New task", focused: false },
+      { control: "Milk", focused: false },
+    ]);
 });
 
 test("text cannot be selected outside text fields, like in a native app", async ({ page }) => {

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent, type RefObject } from "re
 import { flushSync } from "react-dom";
 import { useFeedback } from "../../feedback/feedback-context.tsx";
 import { rowSpring } from "../../ui/motion.ts";
-import { autoScrollSpeed, reorderTarget } from "./reorder.ts";
+import { autoScrollDistance, reorderTarget } from "./reorder.ts";
 import { useClickGuard } from "./use-click-guard.ts";
 import type { PointerStart } from "./use-long-press.ts";
 
@@ -58,6 +58,9 @@ export function useReorder<Id extends string>(
     let clientY = pointer.clientY;
     let to = from;
     let frame = 0;
+    let lastFrameTime: number | null = null;
+    /** The part of a px that the last frames did not scroll yet. */
+    let scrollCarry = 0;
 
     function update(): void {
       const offset = clientY + window.scrollY - startPageY;
@@ -71,10 +74,14 @@ export function useReorder<Id extends string>(
       }
     }
 
-    function scrollNearEdges(): void {
-      const speed = autoScrollSpeed(clientY, window.innerHeight);
-      if (speed !== 0) {
-        window.scrollBy(0, speed);
+    function scrollNearEdges(time: number): void {
+      const elapsed = lastFrameTime === null ? 0 : time - lastFrameTime;
+      lastFrameTime = time;
+      scrollCarry += autoScrollDistance(clientY, window.innerHeight, elapsed);
+      const distance = Math.trunc(scrollCarry);
+      if (distance !== 0) {
+        scrollCarry -= distance;
+        window.scrollBy(0, distance);
         update();
       }
       frame = requestAnimationFrame(scrollNearEdges);
